@@ -11,10 +11,10 @@
     <meta name="apple-mobile-web-app-title" content="SmartCart">
     <meta name="theme-color" content="#2563eb">
 
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232563eb'/%3E%3Cpath d='M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38' stroke='white' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='40' cy='65' r='3' fill='white'/%3E%3Ccircle cx='65' cy='65' r='3' fill='white'/%3E%3C/svg%3E">
-    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232563eb'/%3E%3Cpath d='M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38' stroke='white' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='40' cy='65' r='3' fill='white'/%3E%3Ccircle cx='65' cy='65' r='3' fill='white'/%3E%3C/svg%3E">
+    <link rel="icon" type="image/svg+xml" href="assets/icons/cart-icon.svg">
+    <link rel="apple-touch-icon" href="assets/icons/cart-icon.svg">
 
-    <link rel="manifest" href='data:application/manifest+json,{"name":"SmartCart","short_name":"SmartCart","start_url":".","display":"standalone","background_color":"#f3f4f6","theme_color":"#2563eb","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%232563eb%27/%3E%3Cpath d=%27M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38%27 stroke=%27white%27 stroke-width=%274%27 fill=%27none%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3Ccircle cx=%2740%27 cy=%2765%27 r=%273%27 fill=%27white%27/%3E%3Ccircle cx=%2765%27 cy=%2765%27 r=%273%27 fill=%27white%27/%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}' />
+    <link rel="manifest" href="manifest.json" />
     
     <!-- LIBRARIES (HTTPS forced) -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -71,7 +71,7 @@
                             <p className="text-3xl font-black text-gray-900">€ {total.toFixed(2)}</p>
                         </div>
                         <div className="text-right cursor-pointer" onClick={onEditTarget}>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-end gap-1">Soglia Buono <Icons.Edit size={10}/></p>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-end gap-1">Soglia Spesa <Icons.Edit size={10}/></p>
                             <p className="text-xl font-bold text-blue-600">€ {target.toFixed(2)}</p>
                         </div>
                     </div>
@@ -221,7 +221,7 @@
             return (
                 <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-lg">
                     <div className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-200">
-                        <h3 className="font-black text-center text-xl mb-6 text-gray-900 uppercase tracking-tight">Soglia Coupon</h3>
+                        <h3 className="font-black text-center text-xl mb-6 text-gray-900 uppercase tracking-tight">Soglia Spesa</h3>
                         <div className="relative mb-8">
                             <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-black text-2xl">€</span>
                             <input type="number" value={val} onChange={e => setVal(parseFloat(e.target.value))} className="w-full p-6 pl-12 text-center text-4xl font-black bg-blue-50 border-0 rounded-[2rem] outline-none text-blue-600" />

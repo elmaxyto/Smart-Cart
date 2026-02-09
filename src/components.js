@@ -14,7 +14,7 @@ const ProgressBar = ({ total, target, onEditTarget }) => {
                     <p className="text-3xl font-black text-gray-900">€ {total.toFixed(2)}</p>
                 </div>
                 <div className="text-right cursor-pointer" onClick={onEditTarget}>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-end gap-1">Soglia Buono <Icons.Edit size={10}/></p>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-end gap-1">Soglia Spesa <Icons.Edit size={10}/></p>
                     <p className="text-xl font-bold text-blue-600">€ {target.toFixed(2)}</p>
                 </div>
             </div>
@@ -164,7 +164,7 @@ const ModalTarget = ({ value, onSave, onClose }) => {
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-lg">
             <div className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-200">
-                <h3 className="font-black text-center text-xl mb-6 text-gray-900 uppercase tracking-tight">Soglia Coupon</h3>
+                <h3 className="font-black text-center text-xl mb-6 text-gray-900 uppercase tracking-tight">Soglia Spesa</h3>
                 <div className="relative mb-8">
                     <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-black text-2xl">€</span>
                     <input type="number" value={val} onChange={e => setVal(parseFloat(e.target.value))} className="w-full p-6 pl-12 text-center text-4xl font-black bg-blue-50 border-0 rounded-[2rem] outline-none text-blue-600" />

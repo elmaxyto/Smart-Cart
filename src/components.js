@@ -1,4 +1,3 @@
-const { useState, useRef, useEffect } = SmartCart.hooks;
 const { Icons, vibrate } = SmartCart;
 
 const ProgressBar = ({ total, target, onEditTarget }) => {
@@ -46,8 +45,8 @@ const FilterBar = ({ categories, value, onChange }) => (
 
 const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
     const isTodo = !item.price || item.price === 0;
-    const timerRef = useRef(null);
-    const [isPressing, setIsPressing] = useState(false);
+    const timerRef = SmartCart.hooks.useRef(null);
+    const [isPressing, setIsPressing] = SmartCart.hooks.useState(false);
 
     const handleStart = () => {
         setIsPressing(true);
@@ -91,7 +90,7 @@ const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
 };
 
 const ModalImport = ({ onSave, onClose }) => {
-    const [text, setText] = useState('');
+    const [text, setText] = SmartCart.hooks.useState('');
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
             <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl">
@@ -108,12 +107,12 @@ const ModalImport = ({ onSave, onClose }) => {
 };
 
 const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
-    const [name, setName] = useState(item?.name || '');
-    const [price, setPrice] = useState(item?.price || '');
-    const [discount, setDiscount] = useState(item?.discount || 0);
-    const [category, setCategory] = useState(item?.category || 'Altro');
+    const [name, setName] = SmartCart.hooks.useState(item?.name || '');
+    const [price, setPrice] = SmartCart.hooks.useState(item?.price || '');
+    const [discount, setDiscount] = SmartCart.hooks.useState(item?.discount || 0);
+    const [category, setCategory] = SmartCart.hooks.useState(item?.category || 'Altro');
 
-    useEffect(() => {
+    SmartCart.hooks.useEffect(() => {
         setName(item?.name || '');
         setPrice(item?.price || '');
         setDiscount(item?.discount || 0);
@@ -178,7 +177,7 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
 };
 
 const ModalTarget = ({ value, onSave, onClose }) => {
-    const [val, setVal] = useState(value);
+    const [val, setVal] = SmartCart.hooks.useState(value);
     return (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-lg">
             <div className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl">

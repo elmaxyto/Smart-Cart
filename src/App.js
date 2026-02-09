@@ -1,3 +1,5 @@
+(() => {
+
 const { useState, useEffect, useRef, useMemo } = SmartCart.hooks;
 const { Icons, vibrate, Components } = SmartCart;
 const { ProgressBar, FilterBar, ItemCard, ModalImport, ModalItem, ModalTarget, Scanner } = Components;
@@ -304,3 +306,5 @@ SmartCart.App = App;
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App />);
+
+})();

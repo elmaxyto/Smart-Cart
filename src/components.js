@@ -1,3 +1,4 @@
+(function () {
 const { Icons, vibrate } = SmartCart;
 
 const ProgressBar = ({ total, target, onEditTarget }) => {
@@ -230,3 +231,5 @@ SmartCart.Components = {
 };
 
 window.SmartCart = SmartCart;
+
+})();

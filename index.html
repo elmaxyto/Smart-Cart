@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SmartCart</title>
+    
+    <!-- PWA CONFIGURATION -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="SmartCart">
+    <meta name="theme-color" content="#2563eb">
+
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232563eb'/%3E%3Cpath d='M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38' stroke='white' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='40' cy='65' r='3' fill='white'/%3E%3Ccircle cx='65' cy='65' r='3' fill='white'/%3E%3C/svg%3E">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%232563eb'/%3E%3Cpath d='M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38' stroke='white' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='40' cy='65' r='3' fill='white'/%3E%3Ccircle cx='65' cy='65' r='3' fill='white'/%3E%3C/svg%3E">
+
+    <link rel="manifest" href='data:application/manifest+json,{"name":"SmartCart","short_name":"SmartCart","start_url":".","display":"standalone","background_color":"#f3f4f6","theme_color":"#2563eb","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Crect width=%27100%27 height=%27100%27 rx=%2720%27 fill=%27%232563eb%27/%3E%3Cpath d=%27M30 35h5l3 15a3 3 0 0 0 3 2h28a3 3 0 0 0 3-2l5-13H38%27 stroke=%27white%27 stroke-width=%274%27 fill=%27none%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3Ccircle cx=%2740%27 cy=%2765%27 r=%273%27 fill=%27white%27/%3E%3Ccircle cx=%2765%27 cy=%2765%27 r=%273%27 fill=%27white%27/%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}' />
+    
+    <!-- LIBRARIES (HTTPS forced) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tesseract.js v4 (versione più stabile per produzione) -->
+    <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f3f4f6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overscroll-behavior-y: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .scan-overlay { background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0) 20%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.3)); }
+        .scan-line {
+            width: 100%; height: 2px; background: #ef4444; position: absolute; top: 50%;
+            animation: scan 2s infinite linear; box-shadow: 0 0 8px #ef4444;
+        }
+        @keyframes scan {
+            0% { transform: translateY(-120px); opacity: 0; }
+            15% { opacity: 1; }
+            85% { opacity: 1; }
+            100% { transform: translateY(120px); opacity: 0; }
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .tab-active { color: #2563eb; border-bottom: 3px solid #2563eb; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- 1. UTILS ---
+        const vibrate = (ms = 15) => {
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+                navigator.vibrate(ms);
+            }
+        };
+
+        // --- 2. COMPONENTS: ICONS ---
+        const Icon = ({ children, size = 24, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Icons = {
+            Camera: (p) => <Icon {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></Icon>,
+            Plus: (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>,
+            Trash: (p) => <Icon {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></Icon>,
+            Edit: (p) => <Icon {...p}><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></Icon>,
+            Check: (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>,
+            Cart: (p) => <Icon {...p}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></Icon>,
+            Euro: (p) => <Icon {...p}><path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/></Icon>,
+            Clipboard: (p) => <Icon {...p}><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></Icon>,
+            Circle: (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/></Icon>,
+            X: (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>
+        };
+
+        // --- 3. UI COMPONENTS ---
+        const ProgressBar = ({ total, target, onEditTarget }) => {
+            const remaining = Math.max(0, target - total);
+            const progress = Math.min(100, (total / target) * 100);
+            return (
+                <div className="bg-white p-4 rounded-2xl shadow-sm mb-4 border border-gray-100">
+                    <div className="flex justify-between items-end mb-2">
+                        <div>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Spesa Nel Carrello</p>
+                            <p className="text-3xl font-black text-gray-900">€ {total.toFixed(2)}</p>
+                        </div>
+                        <div className="text-right cursor-pointer" onClick={onEditTarget}>
+                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider flex items-center justify-end gap-1">Soglia Buono <Icons.Edit size={10}/></p>
+                            <p className="text-xl font-bold text-blue-600">€ {target.toFixed(2)}</p>
+                        </div>
+                    </div>
+                    <div className="relative w-full h-4 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`absolute h-full transition-all duration-700 ease-out ${remaining === 0 ? 'bg-green-500' : 'bg-blue-600'}`} style={{ width: `${progress}%` }}></div>
+                    </div>
+                    <div className="mt-3 text-xs font-bold text-center">
+                        {remaining > 0 ? (
+                            <span className="text-red-500">Mancano <span className="text-sm">€ {remaining.toFixed(2)}</span> per lo sconto!</span>
+                        ) : (
+                            <span className="text-green-600 flex items-center justify-center gap-1"><Icons.Check size={14}/> SOGLIA RAGGIUNTA!</span>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
+            const isTodo = !item.price || item.price === 0;
+            const timerRef = useRef(null);
+            const [isPressing, setIsPressing] = useState(false);
+
+            const handleStart = () => {
+                setIsPressing(true);
+                timerRef.current = setTimeout(() => {
+                    vibrate(40);
+                    if(window.confirm(`Vuoi eliminare "${item.name}"?`)) {
+                        onDelete(item.id);
+                    }
+                    setIsPressing(false);
+                }, 750);
+            };
+
+            const handleEnd = () => {
+                clearTimeout(timerRef.current);
+                setIsPressing(false);
+            };
+
+            return (
+                <div 
+                    onMouseDown={handleStart} onMouseUp={handleEnd} onMouseLeave={handleEnd}
+                    onTouchStart={handleStart} onTouchEnd={handleEnd}
+                    className={`bg-white p-3 rounded-2xl shadow-sm border ${isTodo ? 'border-dashed border-gray-300' : 'border-gray-50'} flex items-center gap-3 active:bg-gray-50 transition-all ${isPressing ? 'scale-[0.97]' : ''}`}
+                >
+                    {isTodo && (
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); onToggleCheck(item.id); vibrate(5); }}
+                            className={`shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300'}`}
+                        >
+                            {item.checked ? <Icons.Check size={24} /> : <Icons.Circle size={24} />}
+                        </button>
+                    )}
+
+                    <div onClick={onEdit} className="flex-1 min-w-0 py-1">
+                        <h3 className={`font-bold truncate text-sm ${item.checked ? 'text-gray-300 line-through' : (isTodo ? 'text-gray-500 italic' : 'text-gray-800')}`}>
+                            {item.name}
+                        </h3>
+                        {item.discount > 0 && <span className="inline-block bg-red-100 text-red-600 text-[9px] px-2 py-0.5 rounded-full font-black mt-1">-{item.discount}%</span>}
+                    </div>
+
+                    <div onClick={onEdit} className="text-right font-black text-base text-gray-900 shrink-0 pl-2">
+                        {isTodo ? <span className="text-blue-500 text-[10px] flex items-center gap-1 font-bold uppercase">Prezzo <Icons.Euro size={10}/></span> : `€ ${(item.price * (1 - (item.discount || 0)/100)).toFixed(2)}`}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 4. MAIN APP LOGIC ---
+        function App() {
+            const [items, setItems] = useState(() => JSON.parse(localStorage.getItem('smartcart_items')) || []);
+            const [targetAmount, setTargetAmount] = useState(() => parseFloat(localStorage.getItem('smartcart_target')) || 20.00);
+            const [activeTab, setActiveTab] = useState('cart'); 
+            
+            const [isScanning, setIsScanning] = useState(false);
+            const [showManualAdd, setShowManualAdd] = useState(false);
+            const [showImport, setShowImport] = useState(false);
+            const [showTargetEdit, setShowTargetEdit] = useState(false);
+            const [editingItem, setEditingItem] = useState(null);
+            
+            const [ocrStatus, setOcrStatus] = useState('');
+            const [processing, setProcessing] = useState(false);
+
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                localStorage.setItem('smartcart_items', JSON.stringify(items));
+                localStorage.setItem('smartcart_target', targetAmount);
+            }, [items, targetAmount]);
+
+            useEffect(() => {
+                let streamObj = null;
+                if (isScanning) {
+                    const initCam = async () => {
+                        try {
+                            const constraints = { video: { facingMode: { ideal: 'environment' } }, audio: false };
+                            streamObj = await navigator.mediaDevices.getUserMedia(constraints);
+                            if (videoRef.current) {
+                                videoRef.current.srcObject = streamObj;
+                                await videoRef.current.play();
+                            }
+                        } catch (e) {
+                            try {
+                                streamObj = await navigator.mediaDevices.getUserMedia({ video: true });
+                                if (videoRef.current) {
+                                    videoRef.current.srcObject = streamObj;
+                                    await videoRef.current.play();
+                                }
+                            } catch (e2) {
+                                alert("Errore fotocamera: Verifica i permessi browser.");
+                                setIsScanning(false);
+                            }
+                        }
+                    };
+                    initCam();
+                }
+                return () => {
+                    if (streamObj) streamObj.getTracks().forEach(t => t.stop());
+                };
+            }, [isScanning]);
+
+            const cartItems = useMemo(() => items.filter(i => i.price > 0), [items]);
+            const todoItems = useMemo(() => items.filter(i => !i.price || i.price === 0), [items]);
+            const total = useMemo(() => cartItems.reduce((acc, i) => acc + (i.price * (1 - (i.discount || 0)/100)), 0), [cartItems]);
+
+            const handleSaveItem = (data) => {
+                if (data.isNew) {
+                    setItems(prev => [{ ...data, id: Date.now(), checked: false }, ...prev]);
+                    vibrate(10);
+                } else {
+                    setItems(prev => prev.map(i => i.id === data.id ? { ...data, checked: false } : i));
+                }
+                setEditingItem(null); setShowManualAdd(false); setIsScanning(false);
+            };
+
+            const handleImport = (text) => {
+                const fragments = text.split(/[\n,;]/);
+                const cleaned = [...new Set(fragments.map(f => {
+                    let c = f.trim();
+                    c = c.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '');
+                    c = c.replace(/^[\d\s.•\-\*)]+/, '');
+                    c = c.replace(/^(\d+\s*[xX]?\s*)/, '');
+                    return c.trim();
+                }).filter(n => n.length > 1))];
+                
+                setItems(prev => [...cleaned.map(n => ({ id: Math.random() + Date.now(), name: n, price: 0, discount: 0, checked: false })), ...prev]);
+                setShowImport(false); setActiveTab('todo'); vibrate(30);
+            };
+
+            const captureOCR = async () => {
+                if (!videoRef.current) return;
+                vibrate(); setProcessing(true); setOcrStatus('Analisi immagine...');
+                
+                try {
+                    const canvas = canvasRef.current;
+                    canvas.width = videoRef.current.videoWidth;
+                    canvas.height = videoRef.current.videoHeight;
+                    canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+
+                    // Tesseract v4 initialization
+                    const { data: { text } } = await Tesseract.recognize(canvas, 'ita');
+                    
+                    const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+                    const prices = text.match(/(\d+[.,]\d{2})/g) || [];
+                    
+                    setEditingItem(prev => ({ 
+                        ...(prev || {}),
+                        isNew: !prev?.id,
+                        name: prev?.name || rawLines[0] || '', 
+                        price: prices[0]?.replace(',','.') || '', 
+                        detectedLines: [...new Set(rawLines)] 
+                    }));
+                    setIsScanning(false); setShowManualAdd(true);
+                } catch (err) {
+                    alert("Errore OCR: Prova inserimento manuale.");
+                    console.error(err);
+                } finally {
+                    setProcessing(false);
+                    setOcrStatus('');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen pb-24 relative overflow-hidden flex flex-col bg-gray-50">
+                    <header className="bg-white p-4 pt-6 pb-0 sticky top-0 z-20 shadow-sm">
+                        <div className="flex justify-between items-center mb-4">
+                            <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+                                <div className="bg-blue-600 p-1.5 rounded-lg text-white"><Icons.Cart size={20} /></div> SmartCart
+                            </h1>
+                            <div className="flex gap-1">
+                                <button onClick={() => setShowImport(true)} className="p-2 text-gray-400 active:text-blue-600"><Icons.Clipboard size={22} /></button>
+                                <button onClick={() => window.confirm("Cancellare tutto?") && setItems([])} className="p-2 text-gray-400 active:text-red-500"><Icons.Trash size={22} /></button>
+                            </div>
+                        </div>
+
+                        <div className="flex">
+                            <button onClick={() => setActiveTab('cart')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest ${activeTab === 'cart' ? 'tab-active' : 'text-gray-400'}`}>
+                                Carrello ({cartItems.length})
+                            </button>
+                            <button onClick={() => setActiveTab('todo')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest ${activeTab === 'todo' ? 'tab-active' : 'text-gray-400'}`}>
+                                Lista Spesa ({todoItems.length})
+                            </button>
+                        </div>
+                    </header>
+
+                    <div className="p-4 flex-1 overflow-y-auto no-scrollbar">
+                        {activeTab === 'cart' && <ProgressBar total={total} target={targetAmount} onEditTarget={() => setShowTargetEdit(true)} />}
+
+                        <main className="space-y-3 mt-1">
+                            {(activeTab === 'cart' ? cartItems : todoItems).length === 0 ? (
+                                <div className="text-center py-24 opacity-10 flex flex-col items-center">
+                                    {activeTab === 'cart' ? <Icons.Cart size={64}/> : <Icons.Clipboard size={64}/>}
+                                    <p className="mt-4 font-bold">Tutto vuoto qui</p>
+                                </div>
+                            ) : (
+                                (activeTab === 'cart' ? cartItems : todoItems).map(i => (
+                                    <ItemCard key={i.id} item={i} onEdit={() => setEditingItem(i)} onDelete={handleDeleteItem} onToggleCheck={toggleChecked} />
+                                ))
+                            )}
+                        </main>
+                    </div>
+
+                    <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto z-30 flex gap-4">
+                        <button onClick={() => { setEditingItem({isNew:true, name:'', price:0, discount:0}); setShowManualAdd(true); }} className="flex-1 bg-white text-gray-800 py-4 rounded-3xl shadow-xl font-black text-sm uppercase tracking-wider border border-gray-100 active:scale-95 transition-transform">+ Manuale</button>
+                        <button onClick={() => setIsScanning(true)} className="flex-[1.6] bg-blue-600 text-white py-4 rounded-3xl shadow-xl shadow-blue-200 font-black text-sm uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2"> <Icons.Camera size={18}/> Scansiona</button>
+                    </div>
+
+                    {(showManualAdd || editingItem) && (
+                        <ModalItem 
+                            item={editingItem} 
+                            onClose={() => { setEditingItem(null); setShowManualAdd(false); }} 
+                            onSave={handleSaveItem}
+                            onScan={() => setIsScanning(true)}
+                            onDelete={(id) => { handleDeleteItem(id); setEditingItem(null); }}
+                        />
+                    )}
+                    {showImport && <ModalImport onSave={handleImport} onClose={() => setShowImport(false)} />}
+                    {showTargetEdit && <ModalTarget value={targetAmount} onSave={(v) => { setTargetAmount(v); setShowTargetEdit(false); }} onClose={() => setShowTargetEdit(false)} />}
+                    {isScanning && <Scanner videoRef={videoRef} canvasRef={canvasRef} status={ocrStatus} processing={processing} onCapture={captureOCR} onClose={() => setIsScanning(false)} />}
+                </div>
+            );
+        }
+
+        const ModalImport = ({ onSave, onClose }) => {
+            const [text, setText] = useState('');
+            return (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+                    <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
+                        <h3 className="font-black text-xl mb-2 text-gray-900 uppercase tracking-tight">Importa Lista</h3>
+                        <p className="text-xs text-gray-400 mb-4 font-bold">Incolla messaggi WhatsApp con virgole o ritorni a capo.</p>
+                        <textarea 
+                            autoFocus
+                            className="w-full h-40 p-4 bg-gray-50 border-0 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 mb-4 text-sm font-medium resize-none"
+                            placeholder="Mela, Pera, Latte..."
+                            value={text}
+                            onChange={e => setText(e.target.value)}
+                        ></textarea>
+                        <div className="flex gap-3">
+                            <button onClick={onClose} className="flex-1 py-4 font-bold text-gray-400 bg-gray-100 rounded-2xl uppercase text-[10px]">Annulla</button>
+                            <button onClick={() => onSave(text)} disabled={!text.trim()} className="flex-[1.5] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] disabled:opacity-50">Crea Lista</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ModalItem = ({ item, onClose, onSave, onDelete, onScan }) => {
+            const [name, setName] = useState(item?.name || '');
+            const [price, setPrice] = useState(item?.price || '');
+            const [discount, setDiscount] = useState(item?.discount || 0);
+            return (
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white w-full max-w-sm rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 shadow-2xl animate-in slide-in-from-bottom-20 duration-300 my-0 sm:my-4">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-black text-gray-900 uppercase tracking-tight">{item?.isNew ? 'Nuovo' : 'Modifica'}</h3>
+                            <div className="flex gap-2">
+                                <button onClick={onScan} className="text-blue-600 bg-blue-50 p-3 rounded-2xl"><Icons.Camera size={18}/></button>
+                                {!item?.isNew && <button onClick={() => onDelete(item.id)} className="text-red-500 bg-red-50 p-3 rounded-2xl"><Icons.Trash size={18}/></button>}
+                                <button onClick={onClose} className="text-gray-400 p-3"><Icons.X size={18}/></button>
+                            </div>
+                        </div>
+                        
+                        {item?.detectedLines?.length > 0 && (
+                            <div className="mb-6">
+                                <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest mb-2">Testo Rilevato:</p>
+                                <div className="max-h-32 overflow-y-auto space-y-2 custom-scrollbar pr-1">
+                                    {item.detectedLines.map((l, i) => (
+                                        <div key={i} className="flex gap-2">
+                                            <button onClick={() => setName(l)} className="flex-1 text-[10px] p-3 bg-gray-50 rounded-xl text-left truncate font-bold text-gray-600">{l}</button>
+                                            <button onClick={() => setPrice(l.replace(/[^0-9.,]/g, '').replace(',','.'))} className="p-3 bg-blue-600 text-white rounded-xl shadow-sm"><Icons.Euro size={14}/></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Prodotto</label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="..." className="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"/>
+                            </div>
+                            <div className="flex gap-3">
+                                <div className="flex-1">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Prezzo (€)</label>
+                                    <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="0.00" className="w-full p-4 bg-gray-100 rounded-2xl outline-none font-black text-xl"/>
+                                </div>
+                                <div className="w-24">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Sconto %</label>
+                                    <input type="number" value={discount} onChange={e => setDiscount(Number(e.target.value))} placeholder="0" className="w-full p-4 bg-red-50 rounded-2xl outline-none text-red-600 font-black text-xl text-center"/>
+                                </div>
+                            </div>
+                            <div className="flex gap-3 pt-4">
+                                <button onClick={() => onSave({...item, name, price: parseFloat(price) || 0, discount})} className="flex-1 py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-95 transition-transform">Salva</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const ModalTarget = ({ value, onSave, onClose }) => {
+            const [val, setVal] = useState(value);
+            return (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-lg">
+                    <div className="bg-white w-full max-w-xs rounded-[2.5rem] p-8 shadow-2xl animate-in zoom-in duration-200">
+                        <h3 className="font-black text-center text-xl mb-6 text-gray-900 uppercase tracking-tight">Soglia Coupon</h3>
+                        <div className="relative mb-8">
+                            <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-black text-2xl">€</span>
+                            <input type="number" value={val} onChange={e => setVal(parseFloat(e.target.value))} className="w-full p-6 pl-12 text-center text-4xl font-black bg-blue-50 border-0 rounded-[2rem] outline-none text-blue-600" />
+                        </div>
+                        <button onClick={() => onSave(val)} className="w-full py-5 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest active:scale-95 transition-transform">Conferma</button>
+                        <button onClick={onClose} className="w-full mt-4 py-2 text-gray-400 font-bold uppercase text-[10px]">Chiudi</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const Scanner = ({ videoRef, canvasRef, status, processing, onCapture, onClose }) => (
+            <div className="fixed inset-0 bg-black z-50 flex flex-col">
+                <div className="relative flex-1">
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    <canvas ref={canvasRef} className="hidden" />
+                    <div className="absolute inset-0 scan-overlay flex items-center justify-center">
+                        <div className="w-72 h-48 border-2 border-white/30 rounded-[2.5rem] relative overflow-hidden">
+                            <div className="scan-line"></div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="absolute top-10 right-6 p-4 bg-black/40 text-white rounded-full backdrop-blur-md active:scale-90 transition-transform"><Icons.X size={24}/></button>
+                </div>
+                <div className="bg-white p-8 rounded-t-[3rem] -mt-10 z-10 text-center shadow-2xl">
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-6">{status || "Inquadra Prezzo e Nome"}</p>
+                    <button onClick={onCapture} disabled={processing} className={`w-full py-5 rounded-[2rem] font-black text-lg uppercase tracking-widest text-white shadow-2xl transition-all active:scale-95 ${processing ? 'bg-gray-300' : 'bg-blue-600 shadow-blue-200'}`}>
+                        {processing ? 'Analisi...' : 'Cattura'}
+                    </button>
+                </div>
+            </div>
+        );
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

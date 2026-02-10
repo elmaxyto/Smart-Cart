@@ -194,6 +194,11 @@ function App() {
     const [showTargetEdit, setShowTargetEdit] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
     const [toast, setToast] = useState(null);
+    const [isListening, setIsListening] = useState(false);
+    const [voiceStatusMessage, setVoiceStatusMessage] = useState('');
+    const [isSpeechRecognitionSupported] = useState(() => (
+        typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
+    ));
 
     const [ocrStatus, setOcrStatus] = useState('');
     const [ocrProgress, setOcrProgress] = useState(0);
@@ -205,6 +210,9 @@ function App() {
     const toastTimerRef = useRef(null);
     const clearConfirmUntilRef = useRef(0);
     const importFromLinkHandledRef = useRef(false);
+    const recognitionRef = useRef(null);
+    const shouldKeepListeningRef = useRef(false);
+    const processedVoiceTimestampsRef = useRef(new Map());
     const currentTheme = themePreference || systemTheme;
 
     const showToast = ({ type = 'info', message = '', actionLabel, onAction, duration = 2400 }) => {
@@ -223,6 +231,164 @@ function App() {
         if (typeof window === 'undefined' || !window.history?.replaceState) return;
         const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
         window.history.replaceState({}, document.title, cleanUrl);
+    };
+
+    const sanitizeVoiceTranscript = (rawText) => {
+        let text = toSafeString(rawText, '');
+        if (!text) return '';
+
+        text = text
+            .replace(/[“”"'`]/g, '')
+            .replace(/\s+/g, ' ')
+            .replace(/^[,.;:!?\-–—\s]+/, '')
+            .replace(/[,.;:!?\-–—\s]+$/, '')
+            .trim();
+
+        return text;
+    };
+
+    const addVoiceItem = (rawText) => {
+        const cleanedName = sanitizeVoiceTranscript(rawText);
+        if (!cleanedName) return;
+
+        const voiceKey = cleanedName.toLocaleLowerCase('it-IT');
+        const now = Date.now();
+        const lastSeenAt = processedVoiceTimestampsRef.current.get(voiceKey) || 0;
+        if (now - lastSeenAt < 2500) return;
+
+        processedVoiceTimestampsRef.current.set(voiceKey, now);
+
+        if (processedVoiceTimestampsRef.current.size > 100) {
+            const entries = [...processedVoiceTimestampsRef.current.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 50);
+            processedVoiceTimestampsRef.current = new Map(entries);
+        }
+
+        setItems((prev) => [{
+            id: Date.now() + Math.random(),
+            name: cleanedName,
+            categoryId: '',
+            price: 0,
+            discount: 0,
+            checked: false
+        }, ...prev]);
+        setActiveTab('todo');
+        setVoiceStatusMessage(`Aggiunto: ${cleanedName}`);
+        vibrate(8);
+    };
+
+    const stopVoiceRecognition = (message) => {
+        shouldKeepListeningRef.current = false;
+        const recognition = recognitionRef.current;
+        if (recognition) {
+            try {
+                recognition.stop();
+            } catch (_) {
+                // no-op
+            }
+        }
+        setIsListening(false);
+        setVoiceStatusMessage(message || 'Ascolto terminato');
+    };
+
+    const startVoiceRecognition = () => {
+        if (!isSpeechRecognitionSupported) {
+            setVoiceStatusMessage('Input vocale non supportato su questo browser');
+            showToast({
+                type: 'info',
+                message: 'Input vocale non disponibile su questo browser',
+                duration: 3200
+            });
+            return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            setVoiceStatusMessage('Input vocale non supportato su questo browser');
+            return;
+        }
+
+        if (!recognitionRef.current) {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'it-IT';
+
+            recognition.onresult = (event) => {
+                for (let index = event.resultIndex; index < event.results.length; index += 1) {
+                    const result = event.results[index];
+                    if (!result.isFinal) continue;
+                    const transcript = result[0]?.transcript || '';
+                    addVoiceItem(transcript);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                shouldKeepListeningRef.current = false;
+                setIsListening(false);
+
+                const errorMessages = {
+                    'not-allowed': 'Permesso microfono negato',
+                    'service-not-allowed': 'Permesso microfono negato',
+                    'audio-capture': 'Microfono non rilevato',
+                    'no-speech': 'Nessun parlato rilevato',
+                    'network': 'Errore di rete durante il riconoscimento'
+                };
+
+                const message = errorMessages[event.error] || 'Errore durante il riconoscimento vocale';
+                setVoiceStatusMessage(message);
+                showToast({ type: 'error', message, duration: 3200 });
+
+                try {
+                    recognition.stop();
+                } catch (_) {
+                    // no-op
+                }
+            };
+
+            recognition.onend = () => {
+                if (shouldKeepListeningRef.current) {
+                    try {
+                        recognition.start();
+                        setIsListening(true);
+                        setVoiceStatusMessage('Ascolto attivo');
+                        return;
+                    } catch (_) {
+                        // no-op
+                    }
+                }
+                setIsListening(false);
+                setVoiceStatusMessage((prev) => prev || 'Ascolto terminato');
+            };
+
+            recognitionRef.current = recognition;
+        }
+
+        processedVoiceTimestampsRef.current.clear();
+        shouldKeepListeningRef.current = true;
+
+        try {
+            recognitionRef.current.start();
+            setIsListening(true);
+            setVoiceStatusMessage('Ascolto attivo');
+            vibrate(12);
+        } catch (error) {
+            if (error?.name !== 'InvalidStateError') {
+                setIsListening(false);
+                shouldKeepListeningRef.current = false;
+                setVoiceStatusMessage('Impossibile avviare input vocale');
+                showToast({ type: 'error', message: 'Impossibile avviare input vocale', duration: 3000 });
+            }
+        }
+    };
+
+    const toggleVoiceRecognition = () => {
+        if (isListening) {
+            stopVoiceRecognition('Ascolto terminato');
+            return;
+        }
+        startVoiceRecognition();
     };
 
     useEffect(() => {
@@ -270,6 +436,26 @@ function App() {
             clearTimeout(toastTimerRef.current);
         }
     }, []);
+
+    useEffect(() => () => {
+        shouldKeepListeningRef.current = false;
+        if (recognitionRef.current) {
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current.onend = null;
+            try {
+                recognitionRef.current.stop();
+            } catch (_) {
+                // no-op
+            }
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!isSpeechRecognitionSupported) {
+            setVoiceStatusMessage('Input vocale non supportato su questo browser');
+        }
+    }, [isSpeechRecognitionSupported]);
 
     useEffect(() => {
         if (importFromLinkHandledRef.current || typeof window === 'undefined') return;
@@ -767,9 +953,24 @@ function App() {
                 </main>
             </div>
 
-            <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto z-30 flex gap-4">
-                <button onClick={() => { setEditingItem({ isNew: true, name: '', categoryId: '', price: 0, discount: 0 }); setShowManualAdd(true); }} className="flex-1 bg-white text-gray-800 py-4 rounded-3xl shadow-xl font-black text-sm uppercase tracking-wider border border-gray-100 active:scale-95 transition-transform">+ Manuale</button>
-                <button onClick={() => setIsScanning(true)} className="flex-[1.6] bg-blue-600 text-white py-4 rounded-3xl shadow-xl shadow-blue-200 font-black text-sm uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2"><Icons.Camera size={18}/> Scansiona</button>
+            <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto z-30">
+                {voiceStatusMessage && (
+                    <div className="mb-2 px-3 py-2 rounded-xl bg-white border border-gray-100 text-[10px] font-black uppercase tracking-wider text-gray-500 text-center">
+                        {voiceStatusMessage}
+                    </div>
+                )}
+                <div className="flex gap-3">
+                    <button onClick={() => { setEditingItem({ isNew: true, name: '', categoryId: '', price: 0, discount: 0 }); setShowManualAdd(true); }} className="flex-1 bg-white text-gray-800 py-4 rounded-3xl shadow-xl font-black text-sm uppercase tracking-wider border border-gray-100 active:scale-95 transition-transform">+ Manuale</button>
+                    <button onClick={() => setIsScanning(true)} className="flex-[1.4] bg-blue-600 text-white py-4 rounded-3xl shadow-xl shadow-blue-200 font-black text-sm uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2"><Icons.Camera size={18}/> Scansiona</button>
+                    <button
+                        onClick={toggleVoiceRecognition}
+                        title={isListening ? 'Ferma input vocale' : 'Avvia input vocale'}
+                        disabled={!isSpeechRecognitionSupported}
+                        className={`shrink-0 py-4 px-4 rounded-3xl shadow-xl font-black text-xs uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white' : 'bg-white text-gray-700 border border-gray-100'} ${!isSpeechRecognitionSupported ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        <Icons.Mic size={18} />
+                    </button>
+                </div>
             </div>
 
             {(showManualAdd || editingItem) && (

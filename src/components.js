@@ -39,12 +39,12 @@ const FilterBar = ({ categories, value, onChange }) => (
         <div className="text-gray-400"><Icons.Tag size={16} /></div>
         <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
             <option value="all">Tutte le categorie</option>
-            {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+            {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
         </select>
     </div>
 );
 
-const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
+const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck, onCategoryChange }) => {
     const isTodo = !item.price || item.price === 0;
     const timerRef = SmartCart.hooks.useRef(null);
     const [isPressing, setIsPressing] = SmartCart.hooks.useState(false);
@@ -53,7 +53,7 @@ const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
         setIsPressing(true);
         timerRef.current = setTimeout(() => {
             vibrate(40);
-            if(window.confirm(`Vuoi eliminare "${item.name}"?`)) onDelete(item.id);
+            onDelete(item.id);
             setIsPressing(false);
         }, 750);
     };
@@ -77,8 +77,27 @@ const ItemCard = ({ item, onEdit, onDelete, onToggleCheck }) => {
 
             <div onClick={onEdit} className="flex-1 min-w-0 py-1">
                 <h3 className={`font-bold truncate text-sm ${item.checked ? 'text-gray-300 line-through' : (isTodo ? 'text-gray-500 italic' : 'text-gray-800')}`}>{item.name}</h3>
-                <div className="flex gap-2 mt-1">
-                    {!!item.category && <span className="inline-block bg-blue-50 text-blue-600 text-[9px] px-2 py-0.5 rounded-full font-black">{item.category}</span>}
+                <div className="flex flex-wrap gap-2 mt-1 items-center">
+                    {!!category?.name && (
+                        <span
+                            className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black"
+                            style={{ backgroundColor: `${category.color}22`, color: category.color }}
+                        >
+                            {category.name}
+                        </span>
+                    )}
+
+                    <select
+                        aria-label={`Categoria per ${item.name}`}
+                        value={item.categoryId || ''}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => onCategoryChange(item.id, e.target.value)}
+                        className="max-w-[8.5rem] bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-[10px] font-bold text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
+                    >
+                        <option value="">Altro</option>
+                        {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                    </select>
+
                     {item.discount > 0 && <span className="inline-block bg-red-100 text-red-600 text-[9px] px-2 py-0.5 rounded-full font-black">-{item.discount}%</span>}
                 </div>
             </div>
@@ -111,13 +130,13 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
     const [name, setName] = SmartCart.hooks.useState(item?.name || '');
     const [price, setPrice] = SmartCart.hooks.useState(item?.price || '');
     const [discount, setDiscount] = SmartCart.hooks.useState(item?.discount || 0);
-    const [category, setCategory] = SmartCart.hooks.useState(item?.category || 'Altro');
+    const [categoryId, setCategoryId] = SmartCart.hooks.useState(item?.categoryId || '');
 
     SmartCart.hooks.useEffect(() => {
         setName(item?.name || '');
         setPrice(item?.price || '');
         setDiscount(item?.discount || 0);
-        setCategory(item?.category || 'Altro');
+        setCategoryId(item?.categoryId || '');
     }, [item]);
 
     return (
@@ -154,8 +173,9 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
 
                     <div>
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Categoria</label>
-                        <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full p-4 bg-gray-100 rounded-2xl outline-none text-sm font-bold">
-                            {[...new Set(['Altro', ...categories])].map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full p-4 bg-gray-100 rounded-2xl outline-none text-sm font-bold">
+                            <option value="">Altro</option>
+                            {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                         </select>
                     </div>
 
@@ -170,7 +190,7 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
                         </div>
                     </div>
 
-                    <button onClick={() => onSave({ ...item, name, category, price: parseFloat(price) || 0, discount })} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-95 transition-transform">Salva</button>
+                    <button onClick={() => onSave({ ...item, name, categoryId, price: parseFloat(price) || 0, discount })} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-95 transition-transform">Salva</button>
                 </div>
             </div>
         </div>
@@ -220,6 +240,40 @@ const Scanner = ({ videoRef, canvasRef, status, progress, processing, onCapture,
     </div>
 );
 
+const Toast = ({ toast, onClose }) => {
+    if (!toast) return null;
+
+    const toneClasses = {
+        success: 'border-green-500 text-green-600',
+        error: 'border-red-500 text-red-600',
+        info: 'border-blue-500 text-blue-600'
+    };
+
+    const tone = toneClasses[toast.type] || toneClasses.info;
+
+    return (
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-40 w-[calc(100%-2rem)] max-w-md">
+            <div className="bg-white rounded-2xl shadow-lg border px-4 py-3 flex items-center gap-3" role="status" aria-live="polite">
+                <div className={`shrink-0 text-[10px] font-black uppercase tracking-wider ${tone}`}>
+                    {toast.type === 'success' ? 'OK' : toast.type === 'error' ? 'Errore' : 'Info'}
+                </div>
+                <p className="flex-1 text-xs font-bold text-gray-700">{toast.message}</p>
+                {toast.actionLabel && typeof toast.onAction === 'function' && (
+                    <button
+                        onClick={toast.onAction}
+                        className="text-[10px] font-black uppercase tracking-wider text-blue-600"
+                    >
+                        {toast.actionLabel}
+                    </button>
+                )}
+                <button onClick={onClose} className="text-gray-400" aria-label="Chiudi notifica">
+                    <Icons.X size={16} />
+                </button>
+            </div>
+        </div>
+    );
+};
+
 SmartCart.Components = {
     ProgressBar,
     FilterBar,
@@ -227,7 +281,8 @@ SmartCart.Components = {
     ModalImport,
     ModalItem,
     ModalTarget,
-    Scanner
+    Scanner,
+    Toast
 };
 
 window.SmartCart = SmartCart;

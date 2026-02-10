@@ -2,7 +2,7 @@
 
 const { useState, useEffect, useRef, useMemo } = SmartCart.hooks;
 const { Icons, vibrate, Components, CategoryManager } = SmartCart;
-const { ProgressBar, FilterBar, ItemCard, ModalImport, ModalItem, ModalTarget, Scanner, Toast } = Components;
+const { ProgressBar, FilterBar, ItemCard, ModalImport, ModalLinkImport, ModalItem, ModalTarget, Scanner, Toast } = Components;
 const {
     UNCATEGORIZED_ID,
     loadCategories,
@@ -15,6 +15,12 @@ const {
 const STORAGE_KEY_ITEMS = 'smartcart_items';
 const STORAGE_KEY_TARGET = 'smartcart_target';
 const STORAGE_KEY_THEME = 'smartcart_theme';
+const SHARE_APP_NAME = 'SmartCart';
+const SHARE_PAYLOAD_VERSION = 1;
+const SHARE_MIN_SUPPORTED_VERSION = 1;
+const SHARE_MAX_SUPPORTED_VERSION = SHARE_PAYLOAD_VERSION;
+const SHARE_MAX_ITEMS = 1000;
+const SHARE_MAX_ENCODED_LENGTH = 120000;
 
 const THEME_LIGHT = 'light';
 const THEME_DARK = 'dark';
@@ -61,6 +67,117 @@ const extractPriceCandidates = (text) => {
         .filter((n) => Number.isFinite(n) && n > 0 && n < 10000);
 };
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const toSafeString = (value, fallback = '') => {
+    if (typeof value === 'string') {
+        const cleaned = value.replace(/\s+/g, ' ').trim();
+        return cleaned || fallback;
+    }
+    if (value === null || value === undefined) return fallback;
+    return String(value).trim() || fallback;
+};
+
+const toSafeNumber = (value, { min = 0, max = Number.MAX_SAFE_INTEGER, fallback = 0 } = {}) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return clamp(parsed, min, max);
+};
+
+const toSafeBoolean = (value) => Boolean(value);
+
+const isObjectLike = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const toShareItem = (item) => ({
+    name: toSafeString(item?.name, 'Prodotto').slice(0, 160),
+    categoryId: toSafeString(item?.categoryId, '').slice(0, 80),
+    price: toSafeNumber(item?.price, { min: 0, max: 999999, fallback: 0 }),
+    discount: toSafeNumber(item?.discount, { min: 0, max: 100, fallback: 0 }),
+    checked: toSafeBoolean(item?.checked)
+});
+
+const sanitizeShareItems = (items) => (
+    (Array.isArray(items) ? items : [])
+        .filter(isObjectLike)
+        .slice(0, SHARE_MAX_ITEMS)
+        .map(toShareItem)
+);
+
+const buildSharePayload = (items) => {
+    const sanitizedItems = sanitizeShareItems(items);
+    return {
+        app: SHARE_APP_NAME,
+        version: SHARE_PAYLOAD_VERSION,
+        items: sanitizedItems
+    };
+};
+
+const encodePayloadForUrl = (payload) => {
+    const json = JSON.stringify(payload);
+    const bytes = new TextEncoder().encode(json);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 1) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+
+    return btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/g, '');
+};
+
+const decodePayloadFromUrl = (encoded) => {
+    try {
+        const rawEncoded = toSafeString(encoded, '');
+        if (!rawEncoded) {
+            throw new Error('Payload assente');
+        }
+
+        if (rawEncoded.length > SHARE_MAX_ENCODED_LENGTH) {
+            throw new Error('Payload troppo grande');
+        }
+
+        const base64 = rawEncoded.replace(/-/g, '+').replace(/_/g, '/');
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+            throw new Error('Codifica non valida');
+        }
+
+        const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+        const binary = atob(padded);
+        const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+        const json = new TextDecoder().decode(bytes);
+        const data = JSON.parse(json);
+
+        if (!isObjectLike(data) || data.app !== SHARE_APP_NAME) {
+            throw new Error('Formato applicazione non valido');
+        }
+
+        const version = Number(data.version);
+        if (!Number.isInteger(version)) {
+            throw new Error('Versione formato non valida');
+        }
+        if (version > SHARE_MAX_SUPPORTED_VERSION) {
+            throw new Error('Versione formato non supportata');
+        }
+        if (version < SHARE_MIN_SUPPORTED_VERSION) {
+            throw new Error('Versione formato obsoleta');
+        }
+
+        if (!Array.isArray(data.items)) {
+            throw new Error('Lista elementi non valida');
+        }
+
+        const items = sanitizeShareItems(data.items);
+        return {
+            app: SHARE_APP_NAME,
+            version,
+            items
+        };
+    } catch (error) {
+        throw new Error('Payload di condivisione non valido');
+    }
+};
+
 function App() {
     const [initialData] = useState(() => getInitialData());
     const [items, setItems] = useState(() => initialData.items);
@@ -81,11 +198,13 @@ function App() {
     const [ocrStatus, setOcrStatus] = useState('');
     const [ocrProgress, setOcrProgress] = useState(0);
     const [processing, setProcessing] = useState(false);
+    const [pendingLinkImport, setPendingLinkImport] = useState(null);
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const toastTimerRef = useRef(null);
     const clearConfirmUntilRef = useRef(0);
+    const importFromLinkHandledRef = useRef(false);
     const currentTheme = themePreference || systemTheme;
 
     const showToast = ({ type = 'info', message = '', actionLabel, onAction, duration = 2400 }) => {
@@ -98,6 +217,12 @@ function App() {
         toastTimerRef.current = setTimeout(() => {
             setToast((prev) => (prev?.id === id ? null : prev));
         }, duration);
+    };
+
+    const cleanImportQueryParam = () => {
+        if (typeof window === 'undefined' || !window.history?.replaceState) return;
+        const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
+        window.history.replaceState({}, document.title, cleanUrl);
     };
 
     useEffect(() => {
@@ -145,6 +270,77 @@ function App() {
             clearTimeout(toastTimerRef.current);
         }
     }, []);
+
+    useEffect(() => {
+        if (importFromLinkHandledRef.current || typeof window === 'undefined') return;
+
+        const params = new URLSearchParams(window.location.search || '');
+        const encodedData = params.get('data');
+
+        if (!encodedData) return;
+        importFromLinkHandledRef.current = true;
+
+        try {
+            const payload = decodePayloadFromUrl(encodedData);
+            if (!payload.items.length) {
+                throw new Error('Lista condivisa vuota');
+            }
+            if (payload.items.length > 1000) {
+                throw new Error('Lista troppo grande');
+            }
+
+            setPendingLinkImport({
+                source: 'url',
+                items: payload.items,
+                count: payload.items.length
+            });
+        } catch (error) {
+            showToast({
+                type: 'error',
+                message: 'Link non valido o dati di condivisione corrotti',
+                duration: 3400
+            });
+            cleanImportQueryParam();
+        }
+    }, []);
+
+    const applyLinkImport = (mode = 'merge') => {
+        if (!pendingLinkImport?.items?.length) {
+            setPendingLinkImport(null);
+            cleanImportQueryParam();
+            return;
+        }
+
+        const importedItems = pendingLinkImport.items.map((item, index) => ({
+            ...item,
+            id: Date.now() + index + Math.random()
+        }));
+
+        if (mode === 'replace') {
+            setItems(importedItems);
+        } else {
+            setItems((prev) => [...importedItems, ...prev]);
+        }
+        setActiveTab('todo');
+        setPendingLinkImport(null);
+        showToast({
+            type: 'success',
+            message: mode === 'replace'
+                ? `Lista sostituita con ${importedItems.length} elementi`
+                : `Aggiunti ${importedItems.length} elementi dal link`,
+            duration: 3200
+        });
+        cleanImportQueryParam();
+    };
+
+    const replaceWithLinkImport = () => applyLinkImport('replace');
+    const mergeWithLinkImport = () => applyLinkImport('merge');
+
+    const cancelLinkImport = () => {
+        setPendingLinkImport(null);
+        showToast({ type: 'info', message: 'Import da link annullato', duration: 2400 });
+        cleanImportQueryParam();
+    };
 
     useEffect(() => {
         let streamObj = null;
@@ -360,6 +556,58 @@ function App() {
         URL.revokeObjectURL(url);
     };
 
+    const shareListByLink = async () => {
+        if (!items.length) {
+            showToast({ type: 'info', message: 'Aggiungi almeno un elemento prima di condividere' });
+            return;
+        }
+
+        try {
+            const payload = buildSharePayload(items);
+            const encodedData = encodePayloadForUrl(payload);
+            const relativeLink = `/?data=${encodedData}`;
+            const absoluteLink = `${window.location.origin}${relativeLink}`;
+            const description = 'Ecco la mia lista SmartCart';
+
+            const openManualCopyPrompt = () => {
+                window.prompt('Copia questo link per condividere la lista', absoluteLink);
+            };
+
+            if (typeof navigator.share === 'function') {
+                await navigator.share({
+                    title: 'SmartCart',
+                    text: description,
+                    url: absoluteLink
+                });
+                showToast({ type: 'success', message: 'Condivisione completata' });
+                vibrate(10);
+                return;
+            }
+
+            if (navigator.clipboard?.writeText) {
+                try {
+                    await navigator.clipboard.writeText(absoluteLink);
+                    showToast({ type: 'success', message: 'Link copiato negli appunti' });
+                    vibrate(10);
+                    return;
+                } catch (clipboardError) {
+                    openManualCopyPrompt();
+                    showToast({ type: 'info', message: 'Copia manualmente il link dalla finestra' });
+                    return;
+                }
+            }
+
+            openManualCopyPrompt();
+            showToast({ type: 'info', message: 'Copia manualmente il link dalla finestra' });
+        } catch (error) {
+            showToast({
+                type: 'error',
+                message: 'Impossibile generare il link di condivisione',
+                duration: 3200
+            });
+        }
+    };
+
     const captureOCR = async () => {
         if (!videoRef.current) return;
         vibrate();
@@ -447,6 +695,10 @@ function App() {
                         >
                             {currentTheme === THEME_DARK ? <Icons.Sun size={20} /> : <Icons.Moon size={20} />}
                         </button>
+                        <button onClick={shareListByLink} title="Condividi lista" className="p-2 text-gray-500 active:text-blue-600 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
+                            <Icons.Share size={18} />
+                            <span>Condividi lista</span>
+                        </button>
                         <button onClick={exportCsv} title="Esporta CSV" className="p-2 text-gray-400 active:text-blue-600"><Icons.Download size={20} /></button>
                         <button onClick={() => setShowImport(true)} title="Importa" className="p-2 text-gray-400 active:text-blue-600"><Icons.Clipboard size={22} /></button>
                         <button onClick={handleClearAll} title="Svuota" className="p-2 text-gray-400 active:text-red-500"><Icons.Trash size={22} /></button>
@@ -531,6 +783,14 @@ function App() {
                 />
             )}
             {showImport && <ModalImport onSave={handleImport} onClose={() => setShowImport(false)} />}
+            {pendingLinkImport && (
+                <ModalLinkImport
+                    count={pendingLinkImport.count}
+                    onReplace={replaceWithLinkImport}
+                    onMerge={mergeWithLinkImport}
+                    onCancel={cancelLinkImport}
+                />
+            )}
             {showTargetEdit && <ModalTarget value={targetAmount} onSave={(v) => { setTargetAmount(v); setShowTargetEdit(false); }} onClose={() => setShowTargetEdit(false)} />}
             {isScanning && <Scanner videoRef={videoRef} canvasRef={canvasRef} status={ocrStatus} progress={ocrProgress} processing={processing} onCapture={captureOCR} onClose={() => setIsScanning(false)} />}
             <Toast toast={toast} onClose={() => setToast(null)} />

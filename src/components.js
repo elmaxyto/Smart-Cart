@@ -126,6 +126,33 @@ const ModalImport = ({ onSave, onClose }) => {
     );
 };
 
+const ModalLinkImport = ({ count, onReplace, onMerge, onCancel }) => (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl">
+            <h3 className="font-black text-xl mb-2 text-gray-900 uppercase tracking-tight">Import da link</h3>
+            <p className="text-sm text-gray-600 font-bold leading-relaxed">
+                Trovata una lista SmartCart nel link.
+                <br />
+                Vuoi importare <span className="text-blue-600">{count} elementi</span> nella tua lista locale?
+            </p>
+            <p className="text-[11px] text-gray-400 mt-3 font-bold">
+                Scegli come importare gli elementi.
+            </p>
+            <div className="grid gap-2 mt-5">
+                <button onClick={onReplace} className="w-full py-3 font-black text-gray-800 bg-gray-100 rounded-2xl uppercase text-[10px] tracking-wider">
+                    Sostituisci lista corrente
+                </button>
+                <button onClick={onMerge} className="w-full py-3 bg-blue-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-wider">
+                    Aggiungi alla lista esistente
+                </button>
+                <button onClick={onCancel} className="w-full py-2 font-bold text-gray-500 uppercase text-[10px] mt-1">
+                    Annulla
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
 const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
     const [name, setName] = SmartCart.hooks.useState(item?.name || '');
     const [price, setPrice] = SmartCart.hooks.useState(item?.price || '');
@@ -279,6 +306,7 @@ SmartCart.Components = {
     FilterBar,
     ItemCard,
     ModalImport,
+    ModalLinkImport,
     ModalItem,
     ModalTarget,
     Scanner,

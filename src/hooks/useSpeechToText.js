@@ -22,78 +22,6 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
     ));
 
     const recognitionRef = useRef(null);
-    const shouldKeepListeningRef = useRef(false);
-    const isRecognitionActiveRef = useRef(false);
-    const restartTimerRef = useRef(null);
-
-    const clearRestartTimer = () => {
-        if (restartTimerRef.current) {
-            clearTimeout(restartTimerRef.current);
-            restartTimerRef.current = null;
-        }
-    };
-
-    const scheduleRecognitionStart = (reason = 'manual', attempt = 0) => {
-        const recognition = recognitionRef.current;
-        if (!recognition || !shouldKeepListeningRef.current) return;
-
-        if (isRecognitionActiveRef.current) {
-            setIsListening(true);
-            setVoiceStatusMessage('Ascolto attivo');
-            return;
-        }
-
-        try {
-            recognition.start();
-            setVoiceStatusMessage('Avvio ascolto...');
-        } catch (error) {
-            const isInvalidState = error?.name === 'InvalidStateError';
-
-            if (isInvalidState && attempt < 3) {
-                try {
-                    recognition.abort();
-                } catch (_) {
-                    // no-op
-                }
-
-                clearRestartTimer();
-                restartTimerRef.current = setTimeout(() => {
-                    scheduleRecognitionStart(reason, attempt + 1);
-                }, 120);
-                return;
-            }
-
-            shouldKeepListeningRef.current = false;
-            isRecognitionActiveRef.current = false;
-            setIsListening(false);
-
-            const message = isInvalidState
-                ? 'Riconoscimento vocale occupato. Riprova.'
-                : 'Impossibile avviare input vocale';
-
-            setVoiceStatusMessage(message);
-            if (typeof showToast === 'function') {
-                showToast({ type: 'error', message, duration: 3200 });
-            }
-        }
-    };
-
-    const forceRestartAndStart = (reason = 'manual') => {
-        const recognition = recognitionRef.current;
-        if (!recognition || !shouldKeepListeningRef.current) return;
-
-        clearRestartTimer();
-
-        try {
-            recognition.abort();
-        } catch (_) {
-            // no-op
-        }
-
-        restartTimerRef.current = setTimeout(() => {
-            scheduleRecognitionStart(reason);
-        }, 80);
-    };
 
     const ensureRecognitionInstance = (SpeechRecognition) => {
         if (recognitionRef.current) return recognitionRef.current;
@@ -104,7 +32,6 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
         recognition.lang = locale;
 
         recognition.onstart = () => {
-            isRecognitionActiveRef.current = true;
             setIsListening(true);
             setVoiceStatusMessage('Ascolto attivo');
             vibrate(12);
@@ -121,14 +48,14 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
                 if (typeof onSpeechRecognized === 'function') {
                     onSpeechRecognized(cleanedName);
                 }
-                setVoiceStatusMessage(`Aggiunto: ${cleanedName}`);
                 vibrate(8);
             }
         };
 
         recognition.onerror = (event) => {
-            isRecognitionActiveRef.current = false;
-            setIsListening(false);
+            if (event?.error === 'aborted') {
+                return;
+            }
 
             const errorMessages = {
                 'not-allowed': 'Permesso microfono negato',
@@ -138,35 +65,19 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
                 'network': 'Errore di rete durante il riconoscimento'
             };
 
-            const message = errorMessages[event.error] || 'Errore durante il riconoscimento vocale';
-            setVoiceStatusMessage(message);
-            if (typeof showToast === 'function') {
-                showToast({ type: 'error', message, duration: 3200 });
+            const message = errorMessages[event?.error];
+            if (!message) {
+                return;
             }
 
-            shouldKeepListeningRef.current = false;
-            clearRestartTimer();
-            try {
-                recognition.abort();
-            } catch (_) {
-                // no-op
+            if (typeof showToast === 'function') {
+                showToast({ type: 'error', message, duration: 3200 });
             }
         };
 
         recognition.onend = () => {
-            isRecognitionActiveRef.current = false;
             setIsListening(false);
-
-            // Evita restart automatici fragili: il riavvio è sempre esplicito via click utente.
-            shouldKeepListeningRef.current = false;
-            clearRestartTimer();
-
-            setVoiceStatusMessage((prev) => {
-                if (!prev || prev === 'Avvio ascolto...' || prev === 'Ascolto attivo') {
-                    return 'Ascolto terminato';
-                }
-                return prev;
-            });
+            setVoiceStatusMessage('Ascolto terminato');
         };
 
         recognitionRef.current = recognition;
@@ -174,21 +85,14 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
     };
 
     const stopVoiceRecognition = (message) => {
-        shouldKeepListeningRef.current = false;
-        clearRestartTimer();
-        isRecognitionActiveRef.current = false;
-
         const recognition = recognitionRef.current;
         if (recognition) {
             try {
-                recognition.abort();
+                recognition.stop();
             } catch (_) {
                 // no-op
             }
         }
-
-        setIsListening(false);
-        setVoiceStatusMessage(message || 'Ascolto terminato');
     };
 
     const startVoiceRecognition = () => {
@@ -212,19 +116,26 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
 
         ensureRecognitionInstance(SpeechRecognition);
 
-        shouldKeepListeningRef.current = true;
+        try {
+            recognitionRef.current.start();
+        } catch (error) {
+            if (error?.name === 'InvalidStateError') {
+                return;
+            }
 
-        if (isRecognitionActiveRef.current || isListening) {
-            setVoiceStatusMessage('Ascolto già attivo');
-            return;
+            if (typeof showToast === 'function') {
+                showToast({
+                    type: 'error',
+                    message: 'Impossibile avviare input vocale',
+                    duration: 3200
+                });
+            }
         }
-
-        forceRestartAndStart('manual');
     };
 
     const toggleVoiceRecognition = () => {
         if (isListening) {
-            stopVoiceRecognition('Ascolto terminato');
+            stopVoiceRecognition();
             return;
         }
         startVoiceRecognition();
@@ -237,9 +148,6 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
     }, [isSpeechRecognitionSupported]);
 
     useEffect(() => () => {
-        clearRestartTimer();
-        shouldKeepListeningRef.current = false;
-        isRecognitionActiveRef.current = false;
         if (recognitionRef.current) {
             recognitionRef.current.onresult = null;
             recognitionRef.current.onstart = null;
@@ -259,7 +167,9 @@ function useSpeechToText({ onSpeechRecognized, showToast, locale = 'it-IT' } = {
         isSpeechRecognitionSupported,
         toggleVoiceRecognition,
         startVoiceRecognition,
-        stopVoiceRecognition
+        stopVoiceRecognition,
+        start: startVoiceRecognition,
+        stop: stopVoiceRecognition
     };
 }
 

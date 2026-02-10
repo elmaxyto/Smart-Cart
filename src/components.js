@@ -46,64 +46,144 @@ const FilterBar = ({ categories, value, onChange }) => (
 
 const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck, onCategoryChange }) => {
     const isTodo = !item.price || item.price === 0;
-    const timerRef = SmartCart.hooks.useRef(null);
-    const [isPressing, setIsPressing] = SmartCart.hooks.useState(false);
+    const ACTION_WIDTH = 92;
+    const [offsetX, setOffsetX] = SmartCart.hooks.useState(0);
+    const [isDragging, setIsDragging] = SmartCart.hooks.useState(false);
+    const startXRef = SmartCart.hooks.useRef(0);
+    const startYRef = SmartCart.hooks.useRef(0);
+    const startOffsetRef = SmartCart.hooks.useRef(0);
+    const isSwipingRef = SmartCart.hooks.useRef(false);
+    const didSwipeRef = SmartCart.hooks.useRef(false);
 
-    const handleStart = () => {
-        setIsPressing(true);
-        timerRef.current = setTimeout(() => {
-            vibrate(40);
-            onDelete(item.id);
-            setIsPressing(false);
-        }, 750);
+    const clampOffset = (value) => Math.max(-ACTION_WIDTH, Math.min(0, value));
+
+    const beginSwipe = (x, y) => {
+        startXRef.current = x;
+        startYRef.current = y;
+        startOffsetRef.current = offsetX;
+        isSwipingRef.current = false;
+        didSwipeRef.current = false;
     };
 
-    const handleEnd = () => {
-        clearTimeout(timerRef.current);
-        setIsPressing(false);
+    const updateSwipe = (x, y, event) => {
+        const dx = x - startXRef.current;
+        const dy = y - startYRef.current;
+
+        if (!isSwipingRef.current) {
+            if (Math.abs(dx) < 8) return;
+            if (Math.abs(dy) > Math.abs(dx)) return;
+            isSwipingRef.current = true;
+            setIsDragging(true);
+        }
+
+        didSwipeRef.current = true;
+        const nextOffset = clampOffset(startOffsetRef.current + dx);
+        setOffsetX(nextOffset);
+
+        if (event?.cancelable) {
+            event.preventDefault();
+        }
+    };
+
+    const endSwipe = () => {
+        if (!isSwipingRef.current) return;
+        setIsDragging(false);
+        setOffsetX((prev) => (prev < -ACTION_WIDTH * 0.45 ? -ACTION_WIDTH : 0));
+        isSwipingRef.current = false;
+    };
+
+    const handleCardClick = () => {
+        if (didSwipeRef.current) {
+            didSwipeRef.current = false;
+            return;
+        }
+        if (offsetX < 0) {
+            setOffsetX(0);
+            return;
+        }
+        onEdit();
+    };
+
+    const handleDeleteClick = (event) => {
+        event.stopPropagation();
+        onDelete(item.id);
     };
 
     return (
-        <div
-            onMouseDown={handleStart} onMouseUp={handleEnd} onMouseLeave={handleEnd}
-            onTouchStart={handleStart} onTouchEnd={handleEnd}
-            className={`bg-white p-3 rounded-2xl shadow-sm border ${isTodo ? 'border-dashed border-gray-300' : 'border-gray-50'} flex items-center gap-3 active:bg-gray-50 transition-all ${isPressing ? 'scale-[0.97]' : ''}`}
-        >
-            {isTodo && (
-                <button onClick={(e) => { e.stopPropagation(); onToggleCheck(item.id); vibrate(5); }} className={`shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300'}`}>
-                    {item.checked ? <Icons.Check size={24} /> : <Icons.Circle size={24} />}
-                </button>
-            )}
+        <div className="relative overflow-hidden rounded-2xl">
+            <button
+                onClick={handleDeleteClick}
+                className="absolute right-0 top-0 bottom-0 w-[92px] bg-red-500 text-white flex items-center justify-center gap-1 font-black text-[10px] uppercase tracking-wider"
+                aria-label={`Cancella ${item.name}`}
+            >
+                <Icons.Trash size={14} />
+                Cancella
+            </button>
 
-            <div onClick={onEdit} className="flex-1 min-w-0 py-1">
-                <h3 className={`font-bold truncate text-sm ${item.checked ? 'text-gray-300 line-through' : (isTodo ? 'text-gray-500 italic' : 'text-gray-800')}`}>{item.name}</h3>
-                <div className="flex flex-wrap gap-2 mt-1 items-center">
-                    {!!category?.name && (
-                        <span
-                            className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black"
-                            style={{ backgroundColor: `${category.color}22`, color: category.color }}
+            <div
+                onMouseDown={(e) => beginSwipe(e.clientX, e.clientY)}
+                onMouseMove={(e) => {
+                    if (e.buttons !== 1) return;
+                    updateSwipe(e.clientX, e.clientY, e);
+                }}
+                onMouseUp={endSwipe}
+                onMouseLeave={endSwipe}
+                onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    beginSwipe(touch.clientX, touch.clientY);
+                }}
+                onTouchMove={(e) => {
+                    const touch = e.touches[0];
+                    if (!touch) return;
+                    updateSwipe(touch.clientX, touch.clientY, e);
+                }}
+                onTouchEnd={endSwipe}
+                onTouchCancel={endSwipe}
+                onClick={handleCardClick}
+                className={`bg-white p-3 rounded-2xl shadow-sm border ${isTodo ? 'border-dashed border-gray-300' : 'border-gray-50'} flex items-center gap-3 active:bg-gray-50 transition-all ${isDragging ? 'scale-[0.99]' : ''}`}
+                style={{
+                    transform: `translateX(${offsetX}px)`,
+                    transition: isDragging ? 'none' : 'transform 180ms ease-out',
+                    touchAction: 'pan-y'
+                }}
+            >
+                {isTodo && (
+                    <button onClick={(e) => { e.stopPropagation(); onToggleCheck(item.id); vibrate(5); }} className={`shrink-0 transition-colors ${item.checked ? 'text-green-500' : 'text-gray-300'}`}>
+                        {item.checked ? <Icons.Check size={24} /> : <Icons.Circle size={24} />}
+                    </button>
+                )}
+
+                <div className="flex-1 min-w-0 py-1">
+                    <h3 className={`font-bold truncate text-sm ${item.checked ? 'text-gray-300 line-through' : (isTodo ? 'text-gray-500 italic' : 'text-gray-800')}`}>{item.name}</h3>
+                    <div className="flex flex-wrap gap-2 mt-1 items-center">
+                        {!!category?.name && (
+                            <span
+                                className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black"
+                                style={{ backgroundColor: `${category.color}22`, color: category.color }}
+                            >
+                                {category.name}
+                            </span>
+                        )}
+
+                        <select
+                            aria-label={`Categoria per ${item.name}`}
+                            value={item.categoryId || ''}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => onCategoryChange(item.id, e.target.value)}
+                            className="max-w-[8.5rem] bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-[10px] font-bold text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
                         >
-                            {category.name}
-                        </span>
-                    )}
+                            <option value="">Altro</option>
+                            {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                        </select>
 
-                    <select
-                        aria-label={`Categoria per ${item.name}`}
-                        value={item.categoryId || ''}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => onCategoryChange(item.id, e.target.value)}
-                        className="max-w-[8.5rem] bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-[10px] font-bold text-gray-600 outline-none focus:ring-2 focus:ring-blue-400"
-                    >
-                        <option value="">Altro</option>
-                        {categories.map((cat) => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
-                    </select>
-
-                    {item.discount > 0 && <span className="inline-block bg-red-100 text-red-600 text-[9px] px-2 py-0.5 rounded-full font-black">-{item.discount}%</span>}
+                        {item.discount > 0 && <span className="inline-block bg-red-100 text-red-600 text-[9px] px-2 py-0.5 rounded-full font-black">-{item.discount}%</span>}
+                    </div>
                 </div>
-            </div>
 
-            <div onClick={onEdit} className="text-right font-black text-base text-gray-900 shrink-0 pl-2">
-                {isTodo ? <span className="text-blue-500 text-[10px] flex items-center gap-1 font-bold uppercase">Prezzo <Icons.Euro size={10}/></span> : `€ ${(item.price * (1 - (item.discount || 0)/100)).toFixed(2)}`}
+                <div className="text-right font-black text-base text-gray-900 shrink-0 pl-2">
+                    {isTodo ? <span className="text-blue-500 text-[10px] flex items-center gap-1 font-bold uppercase">Prezzo <Icons.Euro size={10}/></span> : `€ ${(item.price * (1 - (item.discount || 0)/100)).toFixed(2)}`}
+                </div>
             </div>
         </div>
     );

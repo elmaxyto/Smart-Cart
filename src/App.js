@@ -766,7 +766,7 @@ function App() {
             </div>
 
             <div className="fixed bottom-6 left-0 right-0 px-6 max-w-md mx-auto z-30">
-                {voiceStatusMessage && (
+                {activeTab === 'todo' && voiceStatusMessage && (
                     <div className="mb-2 px-3 py-2 rounded-xl bg-white border border-gray-100 text-[10px] font-black uppercase tracking-wider text-gray-500 text-center">
                         {voiceStatusMessage}
                     </div>
@@ -774,14 +774,16 @@ function App() {
                 <div className="flex gap-3">
                     <button onClick={() => { setEditingItem({ isNew: true, name: '', categoryId: '', price: 0, discount: 0 }); setShowManualAdd(true); }} className="flex-1 bg-white text-gray-800 py-4 rounded-3xl shadow-xl font-black text-sm uppercase tracking-wider border border-gray-100 active:scale-95 transition-transform">+ Manuale</button>
                     <button onClick={() => setIsScanning(true)} className="flex-[1.4] bg-blue-600 text-white py-4 rounded-3xl shadow-xl shadow-blue-200 font-black text-sm uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2"><Icons.Camera size={18}/> Scansiona</button>
-                    <button
-                        onClick={toggleVoiceRecognition}
-                        title={isListening ? 'Ferma input vocale' : 'Avvia input vocale'}
-                        disabled={!isSpeechRecognitionSupported}
-                        className={`shrink-0 py-4 px-4 rounded-3xl shadow-xl font-black text-xs uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white' : 'bg-white text-gray-700 border border-gray-100'} ${!isSpeechRecognitionSupported ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                        <Icons.Mic size={18} />
-                    </button>
+                    {activeTab === 'todo' && (
+                        <button
+                            onClick={toggleVoiceRecognition}
+                            title={isListening ? 'Ferma input vocale' : 'Avvia input vocale'}
+                            disabled={!isSpeechRecognitionSupported}
+                            className={`shrink-0 py-4 px-4 rounded-3xl shadow-xl font-black text-xs uppercase tracking-wider active:scale-95 transition-transform flex items-center justify-center gap-2 ${isListening ? 'bg-red-500 text-white' : 'bg-white text-gray-700 border border-gray-100'} ${!isSpeechRecognitionSupported ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                            <Icons.Mic size={18} />
+                        </button>
+                    )}
                 </div>
             </div>
 

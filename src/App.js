@@ -1,7 +1,8 @@
 (() => {
 
 const { useState, useEffect, useRef, useMemo } = SmartCart.hooks;
-const { Icons, vibrate, Components, CategoryManager } = SmartCart;
+const { Icons, vibrate, Components, CategoryManager, CustomHooks = {} } = SmartCart;
+const { useToast, useSpeechToText } = CustomHooks;
 const { ProgressBar, FilterBar, ItemCard, ModalImport, ModalLinkImport, ModalItem, ModalTarget, Scanner, Toast } = Components;
 const {
     UNCATEGORIZED_ID,
@@ -193,12 +194,6 @@ function App() {
     const [showImport, setShowImport] = useState(false);
     const [showTargetEdit, setShowTargetEdit] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    const [toast, setToast] = useState(null);
-    const [isListening, setIsListening] = useState(false);
-    const [voiceStatusMessage, setVoiceStatusMessage] = useState('');
-    const [isSpeechRecognitionSupported] = useState(() => (
-        typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition)
-    ));
 
     const [ocrStatus, setOcrStatus] = useState('');
     const [ocrProgress, setOcrProgress] = useState(0);
@@ -207,64 +202,13 @@ function App() {
 
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
-    const toastTimerRef = useRef(null);
     const clearConfirmUntilRef = useRef(0);
     const importFromLinkHandledRef = useRef(false);
-    const recognitionRef = useRef(null);
-    const shouldKeepListeningRef = useRef(false);
-    const processedVoiceTimestampsRef = useRef(new Map());
     const currentTheme = themePreference || systemTheme;
 
-    const showToast = ({ type = 'info', message = '', actionLabel, onAction, duration = 2400 }) => {
-        if (!message) return;
-        if (toastTimerRef.current) {
-            clearTimeout(toastTimerRef.current);
-        }
-        const id = Date.now() + Math.random();
-        setToast({ id, type, message, actionLabel, onAction });
-        toastTimerRef.current = setTimeout(() => {
-            setToast((prev) => (prev?.id === id ? null : prev));
-        }, duration);
-    };
+    const { toast, showToast, closeToast } = useToast();
 
-    const cleanImportQueryParam = () => {
-        if (typeof window === 'undefined' || !window.history?.replaceState) return;
-        const cleanUrl = `${window.location.pathname}${window.location.hash || ''}`;
-        window.history.replaceState({}, document.title, cleanUrl);
-    };
-
-    const sanitizeVoiceTranscript = (rawText) => {
-        let text = toSafeString(rawText, '');
-        if (!text) return '';
-
-        text = text
-            .replace(/[“”"'`]/g, '')
-            .replace(/\s+/g, ' ')
-            .replace(/^[,.;:!?\-–—\s]+/, '')
-            .replace(/[,.;:!?\-–—\s]+$/, '')
-            .trim();
-
-        return text;
-    };
-
-    const addVoiceItem = (rawText) => {
-        const cleanedName = sanitizeVoiceTranscript(rawText);
-        if (!cleanedName) return;
-
-        const voiceKey = cleanedName.toLocaleLowerCase('it-IT');
-        const now = Date.now();
-        const lastSeenAt = processedVoiceTimestampsRef.current.get(voiceKey) || 0;
-        if (now - lastSeenAt < 2500) return;
-
-        processedVoiceTimestampsRef.current.set(voiceKey, now);
-
-        if (processedVoiceTimestampsRef.current.size > 100) {
-            const entries = [...processedVoiceTimestampsRef.current.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, 50);
-            processedVoiceTimestampsRef.current = new Map(entries);
-        }
-
+    const handleSpeechRecognized = (cleanedName) => {
         setItems((prev) => [{
             id: Date.now() + Math.random(),
             name: cleanedName,
@@ -274,122 +218,17 @@ function App() {
             checked: false
         }, ...prev]);
         setActiveTab('todo');
-        setVoiceStatusMessage(`Aggiunto: ${cleanedName}`);
-        vibrate(8);
     };
 
-    const stopVoiceRecognition = (message) => {
-        shouldKeepListeningRef.current = false;
-        const recognition = recognitionRef.current;
-        if (recognition) {
-            try {
-                recognition.stop();
-            } catch (_) {
-                // no-op
-            }
-        }
-        setIsListening(false);
-        setVoiceStatusMessage(message || 'Ascolto terminato');
-    };
-
-    const startVoiceRecognition = () => {
-        if (!isSpeechRecognitionSupported) {
-            setVoiceStatusMessage('Input vocale non supportato su questo browser');
-            showToast({
-                type: 'info',
-                message: 'Input vocale non disponibile su questo browser',
-                duration: 3200
-            });
-            return;
-        }
-
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!SpeechRecognition) {
-            setVoiceStatusMessage('Input vocale non supportato su questo browser');
-            return;
-        }
-
-        if (!recognitionRef.current) {
-            const recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = false;
-            recognition.lang = 'it-IT';
-
-            recognition.onresult = (event) => {
-                for (let index = event.resultIndex; index < event.results.length; index += 1) {
-                    const result = event.results[index];
-                    if (!result.isFinal) continue;
-                    const transcript = result[0]?.transcript || '';
-                    addVoiceItem(transcript);
-                }
-            };
-
-            recognition.onerror = (event) => {
-                shouldKeepListeningRef.current = false;
-                setIsListening(false);
-
-                const errorMessages = {
-                    'not-allowed': 'Permesso microfono negato',
-                    'service-not-allowed': 'Permesso microfono negato',
-                    'audio-capture': 'Microfono non rilevato',
-                    'no-speech': 'Nessun parlato rilevato',
-                    'network': 'Errore di rete durante il riconoscimento'
-                };
-
-                const message = errorMessages[event.error] || 'Errore durante il riconoscimento vocale';
-                setVoiceStatusMessage(message);
-                showToast({ type: 'error', message, duration: 3200 });
-
-                try {
-                    recognition.stop();
-                } catch (_) {
-                    // no-op
-                }
-            };
-
-            recognition.onend = () => {
-                if (shouldKeepListeningRef.current) {
-                    try {
-                        recognition.start();
-                        setIsListening(true);
-                        setVoiceStatusMessage('Ascolto attivo');
-                        return;
-                    } catch (_) {
-                        // no-op
-                    }
-                }
-                setIsListening(false);
-                setVoiceStatusMessage((prev) => prev || 'Ascolto terminato');
-            };
-
-            recognitionRef.current = recognition;
-        }
-
-        processedVoiceTimestampsRef.current.clear();
-        shouldKeepListeningRef.current = true;
-
-        try {
-            recognitionRef.current.start();
-            setIsListening(true);
-            setVoiceStatusMessage('Ascolto attivo');
-            vibrate(12);
-        } catch (error) {
-            if (error?.name !== 'InvalidStateError') {
-                setIsListening(false);
-                shouldKeepListeningRef.current = false;
-                setVoiceStatusMessage('Impossibile avviare input vocale');
-                showToast({ type: 'error', message: 'Impossibile avviare input vocale', duration: 3000 });
-            }
-        }
-    };
-
-    const toggleVoiceRecognition = () => {
-        if (isListening) {
-            stopVoiceRecognition('Ascolto terminato');
-            return;
-        }
-        startVoiceRecognition();
-    };
+    const {
+        isListening,
+        voiceStatusMessage,
+        isSpeechRecognitionSupported,
+        toggleVoiceRecognition
+    } = useSpeechToText({
+        onSpeechRecognized: handleSpeechRecognized,
+        showToast
+    });
 
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY_ITEMS, JSON.stringify(items));
@@ -430,32 +269,6 @@ function App() {
     useEffect(() => {
         document.documentElement.setAttribute('data-theme', currentTheme);
     }, [currentTheme]);
-
-    useEffect(() => () => {
-        if (toastTimerRef.current) {
-            clearTimeout(toastTimerRef.current);
-        }
-    }, []);
-
-    useEffect(() => () => {
-        shouldKeepListeningRef.current = false;
-        if (recognitionRef.current) {
-            recognitionRef.current.onresult = null;
-            recognitionRef.current.onerror = null;
-            recognitionRef.current.onend = null;
-            try {
-                recognitionRef.current.stop();
-            } catch (_) {
-                // no-op
-            }
-        }
-    }, []);
-
-    useEffect(() => {
-        if (!isSpeechRecognitionSupported) {
-            setVoiceStatusMessage('Input vocale non supportato su questo browser');
-        }
-    }, [isSpeechRecognitionSupported]);
 
     useEffect(() => {
         if (importFromLinkHandledRef.current || typeof window === 'undefined') return;
@@ -607,7 +420,7 @@ function App() {
                         next.splice(Math.max(0, Math.min(removedIndex, next.length)), 0, removedItem);
                         return next;
                     });
-                    setToast(null);
+                    closeToast();
                     showToast({ type: 'info', message: 'Elemento ripristinato', duration: 2000 });
                 },
                 duration: 4200
@@ -993,7 +806,7 @@ function App() {
             )}
             {showTargetEdit && <ModalTarget value={targetAmount} onSave={(v) => { setTargetAmount(v); setShowTargetEdit(false); }} onClose={() => setShowTargetEdit(false)} />}
             {isScanning && <Scanner videoRef={videoRef} canvasRef={canvasRef} status={ocrStatus} progress={ocrProgress} processing={processing} onCapture={captureOCR} onClose={() => setIsScanning(false)} />}
-            <Toast toast={toast} onClose={() => setToast(null)} />
+            <Toast toast={toast} onClose={closeToast} />
         </div>
     );
 }

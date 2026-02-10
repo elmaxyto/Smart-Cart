@@ -881,9 +881,8 @@ function App() {
                         >
                             {currentTheme === THEME_DARK ? <Icons.Sun size={20} /> : <Icons.Moon size={20} />}
                         </button>
-                        <button onClick={shareListByLink} title="Condividi lista" className="p-2 text-gray-500 active:text-blue-600 inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider">
-                            <Icons.Share size={18} />
-                            <span>Condividi lista</span>
+                        <button onClick={shareListByLink} title="Condividi lista" className="p-2 text-gray-400 active:text-blue-600">
+                            <Icons.Share size={20} />
                         </button>
                         <button onClick={exportCsv} title="Esporta CSV" className="p-2 text-gray-400 active:text-blue-600"><Icons.Download size={20} /></button>
                         <button onClick={() => setShowImport(true)} title="Importa" className="p-2 text-gray-400 active:text-blue-600"><Icons.Clipboard size={22} /></button>

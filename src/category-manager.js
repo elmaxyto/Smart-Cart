@@ -193,11 +193,12 @@ const updateCategory = (categories, categoryId, patch) => {
 
     return normalizeCategories(normalized.map((cat) => {
         if (cat.id !== id) return cat;
+        const patchedIcon = patch?.icon ?? cat.icon;
         return {
             ...cat,
             name: nextName,
             color: normalizeHexColor(patch?.color ?? cat.color),
-            icon: String(patch?.icon ?? cat.icon || '').trim()
+            icon: String(patchedIcon || '').trim()
         };
     }));
 };

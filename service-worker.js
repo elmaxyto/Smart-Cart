@@ -1,12 +1,16 @@
-const CACHE_NAME = 'smartcart-v2';
+const CACHE_NAME = 'smartcart-v3';
 const APP_SHELL = [
   './',
   './index.html',
   './style.css',
   './manifest.json',
   './src/utils.js',
+  './src/category-manager.js',
   './src/components.js',
+  './src/hooks/useToast.js',
+  './src/hooks/useSpeechToText.js',
   './src/App.js',
+  './assets/suggestions.json',
   './assets/icons/cart-icon.svg',
   './assets/icons/icon-192.svg',
   './assets/icons/icon-512.svg'

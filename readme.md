@@ -11,7 +11,10 @@ L’obiettivo del progetto è offrire un’esperienza pulita e immediata, senza 
 - Creazione e gestione di una lista della spesa
 - Aggiunta, modifica ed eliminazione degli elementi
 - Assegnazione degli elementi a categorie
+- Personalizzazione categorie (creazione, modifica colore, eliminazione)
 - Filtro degli elementi per categoria
+- Suggerimenti prodotti integrati durante l'inserimento manuale
+- Wallet carte fedeltà con inserimento manuale e scansione barcode/QR (browser compatibili)
 - Modalità chiara e modalità scura
 - Salvataggio automatico dei dati in locale
 - Funzionamento offline

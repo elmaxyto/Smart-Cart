@@ -134,6 +134,101 @@ const resolveCategoryForItem = (item, categories) => {
 
 const getFilterCategories = (categories) => normalizeCategories(categories);
 
+const addCategory = (categories, draft) => {
+    const normalized = normalizeCategories(categories);
+    const name = String(draft?.name || '').trim();
+    if (!name) {
+        throw new Error('Nome categoria obbligatorio');
+    }
+
+    const duplicate = normalized.find((cat) => cat.name.toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+        throw new Error('Esiste già una categoria con questo nome');
+    }
+
+    const base = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+    const ids = new Set(normalized.map((cat) => cat.id));
+    let id = base || `cat-${Date.now()}`;
+    let counter = 1;
+    while (ids.has(id)) {
+        id = `${base || 'cat'}-${counter++}`;
+    }
+
+    return normalizeCategories([
+        ...normalized,
+        {
+            id,
+            name,
+            color: normalizeHexColor(draft?.color),
+            icon: String(draft?.icon || '').trim()
+        }
+    ]);
+};
+
+const updateCategory = (categories, categoryId, patch) => {
+    const normalized = normalizeCategories(categories);
+    const id = String(categoryId || '').trim();
+    if (!id || id === UNCATEGORIZED_ID) {
+        throw new Error('Categoria non modificabile');
+    }
+
+    const category = normalized.find((cat) => cat.id === id);
+    if (!category) {
+        throw new Error('Categoria non trovata');
+    }
+
+    const nextName = String(patch?.name ?? category.name).trim();
+    if (!nextName) {
+        throw new Error('Nome categoria obbligatorio');
+    }
+
+    const duplicate = normalized.find((cat) => cat.id !== id && cat.name.toLowerCase() === nextName.toLowerCase());
+    if (duplicate) {
+        throw new Error('Esiste già una categoria con questo nome');
+    }
+
+    return normalizeCategories(normalized.map((cat) => {
+        if (cat.id !== id) return cat;
+        return {
+            ...cat,
+            name: nextName,
+            color: normalizeHexColor(patch?.color ?? cat.color),
+            icon: String(patch?.icon ?? cat.icon || '').trim()
+        };
+    }));
+};
+
+const removeCategory = (categories, items, categoryId) => {
+    const normalized = normalizeCategories(categories);
+    const id = String(categoryId || '').trim();
+    if (!id || id === UNCATEGORIZED_ID) {
+        throw new Error('Categoria non eliminabile');
+    }
+
+    if (!normalized.some((cat) => cat.id === id)) {
+        return {
+            categories: normalized,
+            items: Array.isArray(items) ? items : []
+        };
+    }
+
+    const nextCategories = normalizeCategories(normalized.filter((cat) => cat.id !== id));
+    const nextItems = (Array.isArray(items) ? items : []).map((item) => (
+        String(item?.categoryId || '').trim() === id
+            ? { ...item, categoryId: '' }
+            : item
+    ));
+
+    return {
+        categories: nextCategories,
+        items: nextItems
+    };
+};
+
 SmartCart.CategoryManager = {
     STORAGE_KEY_CATEGORIES,
     UNCATEGORIZED_ID,
@@ -144,7 +239,10 @@ SmartCart.CategoryManager = {
     createCategoryFromName,
     migrateItemsAndCategories,
     resolveCategoryForItem,
-    getFilterCategories
+    getFilterCategories,
+    addCategory,
+    updateCategory,
+    removeCategory
 };
 
 window.SmartCart = SmartCart;

@@ -80,9 +80,7 @@ const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck,
         const nextOffset = clampOffset(startOffsetRef.current + dx);
         setOffsetX(nextOffset);
 
-        if (event?.cancelable) {
-            event.preventDefault();
-        }
+        if (event?.cancelable) event.preventDefault();
     };
 
     const endSwipe = () => {
@@ -104,15 +102,10 @@ const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck,
         onEdit();
     };
 
-    const handleDeleteClick = (event) => {
-        event.stopPropagation();
-        onDelete(item.id);
-    };
-
     return (
         <div className="relative overflow-hidden rounded-2xl">
             <button
-                onClick={handleDeleteClick}
+                onClick={(event) => { event.stopPropagation(); onDelete(item.id); }}
                 className="absolute right-0 top-0 bottom-0 w-[92px] bg-red-500 text-white flex items-center justify-center gap-1 font-black text-[10px] uppercase tracking-wider"
                 aria-label={`Cancella ${item.name}`}
             >
@@ -122,22 +115,11 @@ const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck,
 
             <div
                 onMouseDown={(e) => beginSwipe(e.clientX, e.clientY)}
-                onMouseMove={(e) => {
-                    if (e.buttons !== 1) return;
-                    updateSwipe(e.clientX, e.clientY, e);
-                }}
+                onMouseMove={(e) => { if (e.buttons === 1) updateSwipe(e.clientX, e.clientY, e); }}
                 onMouseUp={endSwipe}
                 onMouseLeave={endSwipe}
-                onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    if (!touch) return;
-                    beginSwipe(touch.clientX, touch.clientY);
-                }}
-                onTouchMove={(e) => {
-                    const touch = e.touches[0];
-                    if (!touch) return;
-                    updateSwipe(touch.clientX, touch.clientY, e);
-                }}
+                onTouchStart={(e) => { const t = e.touches[0]; if (t) beginSwipe(t.clientX, t.clientY); }}
+                onTouchMove={(e) => { const t = e.touches[0]; if (t) updateSwipe(t.clientX, t.clientY, e); }}
                 onTouchEnd={endSwipe}
                 onTouchCancel={endSwipe}
                 onClick={handleCardClick}
@@ -158,10 +140,7 @@ const ItemCard = ({ item, category, categories, onEdit, onDelete, onToggleCheck,
                     <h3 className={`font-bold truncate text-sm ${item.checked ? 'text-gray-300 line-through' : (isTodo ? 'text-gray-500 italic' : 'text-gray-800')}`}>{item.name}</h3>
                     <div className="flex flex-wrap gap-2 mt-1 items-center">
                         {!!category?.name && (
-                            <span
-                                className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black"
-                                style={{ backgroundColor: `${category.color}22`, color: category.color }}
-                            >
+                            <span className="inline-block text-[9px] px-2 py-0.5 rounded-full font-black" style={{ backgroundColor: `${category.color}22`, color: category.color }}>
                                 {category.name}
                             </span>
                         )}
@@ -206,6 +185,40 @@ const ModalImport = ({ onSave, onClose }) => {
     );
 };
 
+const SuggestionsInput = ({ value, onChange, suggestions, onPick, placeholder = '...' }) => {
+    const normalized = String(value || '').trim().toLowerCase();
+    const filtered = normalized.length < 2
+        ? []
+        : suggestions
+            .filter((entry) => entry.toLowerCase().includes(normalized))
+            .slice(0, 6);
+
+    return (
+        <div>
+            <input
+                type="text"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                placeholder={placeholder}
+                className="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"
+            />
+            {filtered.length > 0 && (
+                <div className="mt-2 bg-gray-50 border border-gray-200 rounded-xl p-2 grid gap-1">
+                    {filtered.map((entry) => (
+                        <button
+                            key={entry}
+                            onClick={() => onPick(entry)}
+                            className="text-left px-2 py-1.5 rounded-lg text-xs font-bold text-gray-700 bg-white border border-gray-100"
+                        >
+                            {entry}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const ModalLinkImport = ({ count, onReplace, onMerge, onCancel }) => (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
         <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl">
@@ -214,9 +227,6 @@ const ModalLinkImport = ({ count, onReplace, onMerge, onCancel }) => (
                 Trovata una lista SmartCart nel link.
                 <br />
                 Vuoi importare <span className="text-blue-600">{count} elementi</span> nella tua lista locale?
-            </p>
-            <p className="text-[11px] text-gray-400 mt-3 font-bold">
-                Scegli come importare gli elementi.
             </p>
             <div className="grid gap-2 mt-5">
                 <button onClick={onReplace} className="w-full py-3 font-black text-gray-800 bg-gray-100 rounded-2xl uppercase text-[10px] tracking-wider">
@@ -233,7 +243,7 @@ const ModalLinkImport = ({ count, onReplace, onMerge, onCancel }) => (
     </div>
 );
 
-const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
+const ModalItem = ({ item, categories, suggestions, onClose, onSave, onDelete, onScan }) => {
     const [name, setName] = SmartCart.hooks.useState(item?.name || '');
     const [price, setPrice] = SmartCart.hooks.useState(item?.price || '');
     const [discount, setDiscount] = SmartCart.hooks.useState(item?.discount || 0);
@@ -275,7 +285,13 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
                 <div className="space-y-4">
                     <div>
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Prodotto</label>
-                        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="..." className="w-full p-4 bg-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"/>
+                        <SuggestionsInput
+                            value={name}
+                            onChange={setName}
+                            onPick={setName}
+                            suggestions={Array.isArray(suggestions) ? suggestions : []}
+                            placeholder="..."
+                        />
                     </div>
 
                     <div>
@@ -298,6 +314,225 @@ const ModalItem = ({ item, categories, onClose, onSave, onDelete, onScan }) => {
                     </div>
 
                     <button onClick={() => onSave({ ...item, name, categoryId, price: parseFloat(price) || 0, discount })} className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-100 active:scale-95 transition-transform">Salva</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const ModalCategoryManager = ({ categories, onClose, onAdd, onUpdate, onDelete }) => {
+    const [name, setName] = SmartCart.hooks.useState('');
+    const [color, setColor] = SmartCart.hooks.useState('#64748b');
+    const [drafts, setDrafts] = SmartCart.hooks.useState({});
+    const editable = categories.filter((cat) => cat.id !== 'uncategorized');
+
+    SmartCart.hooks.useEffect(() => {
+        const nextDrafts = {};
+        editable.forEach((cat) => {
+            nextDrafts[cat.id] = cat.name;
+        });
+        setDrafts(nextDrafts);
+    }, [categories.length]);
+
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-black text-xl text-gray-900 uppercase tracking-tight">Gestisci categorie</h3>
+                    <button onClick={onClose} className="text-gray-400"><Icons.X size={18} /></button>
+                </div>
+
+                <div className="space-y-2 mb-5">
+                    {editable.length === 0 && <p className="text-xs font-bold text-gray-500">Nessuna categoria personalizzata.</p>}
+                    {editable.map((cat) => (
+                        <div key={cat.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    value={drafts[cat.id] ?? cat.name}
+                                    onChange={(e) => setDrafts((prev) => ({ ...prev, [cat.id]: e.target.value }))}
+                                    onBlur={() => onUpdate(cat.id, { name: drafts[cat.id] ?? cat.name })}
+                                    className="flex-1 px-3 py-2 bg-white rounded-lg border border-gray-200 text-xs font-bold"
+                                />
+                                <input type="color" value={cat.color} onChange={(e) => onUpdate(cat.id, { color: e.target.value })} className="w-10 h-10 rounded-lg border border-gray-200" />
+                                <button onClick={() => onDelete(cat.id)} className="p-2 text-red-500"><Icons.Trash size={16} /></button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="pt-4 border-t border-gray-100">
+                    <p className="text-[10px] text-gray-400 font-black uppercase tracking-wider mb-2">Nuova categoria</p>
+                    <div className="flex gap-2">
+                        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Es. Frutta" className="flex-1 px-3 py-3 bg-gray-50 rounded-xl border border-gray-200 text-sm font-bold" />
+                        <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-12 h-12 rounded-xl border border-gray-200" />
+                    </div>
+                    <button
+                        onClick={() => {
+                            onAdd({ name, color });
+                            setName('');
+                            setColor('#64748b');
+                        }}
+                        disabled={!name.trim()}
+                        className="w-full mt-3 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase tracking-wider disabled:opacity-40"
+                    >
+                        Aggiungi categoria
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const BarcodePreview = ({ value }) => {
+    const safe = String(value || '').trim();
+    const bars = safe.split('').map((ch, index) => {
+        const code = ch.charCodeAt(0);
+        return `${(code % 4) + 1}${index % 2}`;
+    }).join('');
+
+    return (
+        <div className="bg-white border border-gray-200 rounded-xl p-3">
+            <div className="h-14 flex items-end gap-[1px] overflow-hidden rounded bg-gray-50 p-1">
+                {bars.split('').map((digit, idx) => (
+                    <span key={`${digit}-${idx}`} style={{ width: '2px', height: `${25 + Number(digit) * 8}px` }} className="bg-gray-900 inline-block" />
+                ))}
+            </div>
+            <p className="mt-2 text-center text-[11px] font-black tracking-wider text-gray-600">{safe}</p>
+        </div>
+    );
+};
+
+const ModalLoyaltyCards = ({ cards, onClose, onChangeCards, onToast }) => {
+    const [name, setName] = SmartCart.hooks.useState('');
+    const [code, setCode] = SmartCart.hooks.useState('');
+    const [type, setType] = SmartCart.hooks.useState('barcode');
+    const [scanning, setScanning] = SmartCart.hooks.useState(false);
+    const [scanError, setScanError] = SmartCart.hooks.useState('');
+    const videoRef = SmartCart.hooks.useRef(null);
+    const streamRef = SmartCart.hooks.useRef(null);
+    const frameRef = SmartCart.hooks.useRef(null);
+    const scanningRef = SmartCart.hooks.useRef(false);
+
+    const stopScanner = SmartCart.hooks.useCallback(() => {
+        if (frameRef.current) cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+        scanningRef.current = false;
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach((track) => track.stop());
+            streamRef.current = null;
+        }
+        setScanning(false);
+    }, []);
+
+    SmartCart.hooks.useEffect(() => () => stopScanner(), [stopScanner]);
+
+    const startScanner = async () => {
+        setScanError('');
+        if (!(window.BarcodeDetector && navigator.mediaDevices?.getUserMedia)) {
+            setScanError('Scanner non supportato su questo browser. Inserisci il codice manualmente.');
+            return;
+        }
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } } });
+            streamRef.current = stream;
+            setScanning(true);
+            scanningRef.current = true;
+            const video = videoRef.current;
+            if (!video) return;
+            video.srcObject = stream;
+            await video.play();
+
+            const detector = new window.BarcodeDetector();
+            const scanLoop = async () => {
+                if (!videoRef.current || !scanningRef.current) return;
+                try {
+                    const detections = await detector.detect(videoRef.current);
+                    if (detections?.length) {
+                        const first = detections[0];
+                        setCode(first.rawValue || '');
+                        if (first.format?.toLowerCase().includes('qr')) setType('qr');
+                        onToast?.({ type: 'success', message: 'Codice rilevato con successo' });
+                        stopScanner();
+                        return;
+                    }
+                } catch (e) {
+                    setScanError('Errore durante la scansione.');
+                    stopScanner();
+                    return;
+                }
+                frameRef.current = requestAnimationFrame(scanLoop);
+            };
+            frameRef.current = requestAnimationFrame(scanLoop);
+        } catch (error) {
+            setScanError('Impossibile accedere alla fotocamera.');
+            stopScanner();
+        }
+    };
+
+    const addCard = () => {
+        const trimmedName = name.trim();
+        const trimmedCode = code.trim();
+        if (!trimmedName || !trimmedCode) return;
+        onChangeCards((prev) => ([
+            {
+                id: `${Date.now()}-${Math.random()}`,
+                name: trimmedName,
+                code: trimmedCode,
+                type,
+                createdAt: Date.now()
+            },
+            ...prev
+        ]));
+        setName('');
+        setCode('');
+        setType('barcode');
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-black text-xl text-gray-900 uppercase tracking-tight">Carte fedeltà</h3>
+                    <button onClick={() => { stopScanner(); onClose(); }} className="text-gray-400"><Icons.X size={18} /></button>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-xl border border-gray-100 space-y-2 mb-5">
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome carta" className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-bold" />
+                    <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Codice" className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-bold" />
+                    <div className="flex gap-2">
+                        <select value={type} onChange={(e) => setType(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-bold">
+                            <option value="barcode">Barcode</option>
+                            <option value="qr">QR Code</option>
+                        </select>
+                        <button onClick={startScanner} className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase">Scansiona</button>
+                    </div>
+                    {scanError && <p className="text-[11px] text-red-500 font-bold">{scanError}</p>}
+                    {scanning && (
+                        <div className="mt-2 rounded-xl overflow-hidden border border-gray-200 bg-black">
+                            <video ref={videoRef} autoPlay playsInline muted className="w-full h-44 object-cover" />
+                            <button onClick={stopScanner} className="w-full py-2 text-xs font-black uppercase bg-gray-100 text-gray-700">Ferma scanner</button>
+                        </div>
+                    )}
+                    <button onClick={addCard} disabled={!name.trim() || !code.trim()} className="w-full py-2 bg-blue-600 text-white rounded-lg text-xs font-black uppercase disabled:opacity-40">
+                        Salva carta
+                    </button>
+                </div>
+
+                <div className="space-y-3">
+                    {cards.length === 0 && <p className="text-xs text-gray-500 font-bold">Nessuna carta salvata.</p>}
+                    {cards.map((card) => (
+                        <div key={card.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50 space-y-2">
+                            <div className="flex justify-between items-center gap-2">
+                                <div>
+                                    <p className="text-sm font-black text-gray-800">{card.name}</p>
+                                    <p className="text-[10px] uppercase font-bold text-gray-400">{card.type === 'qr' ? 'QR Code' : 'Barcode'}</p>
+                                </div>
+                                <button onClick={() => onChangeCards((prev) => prev.filter((c) => c.id !== card.id))} className="text-red-500 p-2"><Icons.Trash size={15}/></button>
+                            </div>
+                            <BarcodePreview value={card.code} />
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
@@ -366,16 +601,9 @@ const Toast = ({ toast, onClose }) => {
                 </div>
                 <p className="flex-1 text-xs font-bold text-gray-700">{toast.message}</p>
                 {toast.actionLabel && typeof toast.onAction === 'function' && (
-                    <button
-                        onClick={toast.onAction}
-                        className="text-[10px] font-black uppercase tracking-wider text-blue-600"
-                    >
-                        {toast.actionLabel}
-                    </button>
+                    <button onClick={toast.onAction} className="text-[10px] font-black uppercase tracking-wider text-blue-600">{toast.actionLabel}</button>
                 )}
-                <button onClick={onClose} className="text-gray-400" aria-label="Chiudi notifica">
-                    <Icons.X size={16} />
-                </button>
+                <button onClick={onClose} className="text-gray-400" aria-label="Chiudi notifica"><Icons.X size={16} /></button>
             </div>
         </div>
     );
@@ -388,11 +616,12 @@ SmartCart.Components = {
     ModalImport,
     ModalLinkImport,
     ModalItem,
+    ModalCategoryManager,
+    ModalLoyaltyCards,
     ModalTarget,
     Scanner,
     Toast
 };
 
 window.SmartCart = SmartCart;
-
 })();

@@ -12,6 +12,7 @@ const {
     ModalItem,
     ModalCategoryManager,
     ModalLoyaltyCards,
+    ModalOptions,
     ModalTarget,
     Scanner,
     Toast
@@ -218,6 +219,7 @@ function App() {
     const [isScanning, setIsScanning] = useState(false);
     const [showManualAdd, setShowManualAdd] = useState(false);
     const [showImport, setShowImport] = useState(false);
+    const [showOptions, setShowOptions] = useState(false);
     const [showTargetEdit, setShowTargetEdit] = useState(false);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [showLoyaltyCards, setShowLoyaltyCards] = useState(false);
@@ -648,17 +650,13 @@ function App() {
                         <div className="bg-blue-600 p-1.5 rounded-lg text-white"><Icons.Cart size={20} /></div>
                         SmartCart
                     </h1>
-                    <div className="flex gap-1">
-                        <button onClick={() => setShowCategoryManager(true)} title="Categorie" className="p-2 text-gray-400 active:text-blue-600"><Icons.Settings size={20} /></button>
-                        <button onClick={() => setShowLoyaltyCards(true)} title="Carte fedeltà" className="p-2 text-gray-400 active:text-blue-600"><Icons.Card size={20} /></button>
-                        <button onClick={toggleTheme} title={currentTheme === THEME_DARK ? 'Passa al tema chiaro' : 'Passa al tema scuro'} className="p-2 text-gray-400 active:text-blue-600">
-                            {currentTheme === THEME_DARK ? <Icons.Sun size={20} /> : <Icons.Moon size={20} />}
-                        </button>
-                        <button onClick={shareListByLink} title="Condividi lista" className="p-2 text-gray-400 active:text-blue-600"><Icons.Share size={20} /></button>
-                        <button onClick={exportCsv} title="Esporta CSV" className="p-2 text-gray-400 active:text-blue-600"><Icons.Download size={20} /></button>
-                        <button onClick={() => setShowImport(true)} title="Importa" className="p-2 text-gray-400 active:text-blue-600"><Icons.Clipboard size={22} /></button>
-                        <button onClick={handleClearAll} title="Svuota" className="p-2 text-gray-400 active:text-red-500"><Icons.Trash size={22} /></button>
-                    </div>
+                    <button
+                        onClick={() => setShowOptions(true)}
+                        title="Apri opzioni"
+                        className="p-2 text-gray-400 active:text-blue-600"
+                    >
+                        <Icons.Settings size={20} />
+                    </button>
                 </div>
 
                 <div className="flex">
@@ -746,6 +744,40 @@ function App() {
                 />
             )}
             {showImport && <ModalImport onSave={handleImport} onClose={() => setShowImport(false)} />}
+            {showOptions && (
+                <ModalOptions
+                    isDarkTheme={currentTheme === THEME_DARK}
+                    onClose={() => setShowOptions(false)}
+                    onToggleTheme={() => {
+                        setShowOptions(false);
+                        toggleTheme();
+                    }}
+                    onShare={() => {
+                        setShowOptions(false);
+                        shareListByLink();
+                    }}
+                    onExport={() => {
+                        setShowOptions(false);
+                        exportCsv();
+                    }}
+                    onImport={() => {
+                        setShowOptions(false);
+                        setShowImport(true);
+                    }}
+                    onClear={() => {
+                        setShowOptions(false);
+                        handleClearAll();
+                    }}
+                    onOpenCategories={() => {
+                        setShowOptions(false);
+                        setShowCategoryManager(true);
+                    }}
+                    onOpenLoyalty={() => {
+                        setShowOptions(false);
+                        setShowLoyaltyCards(true);
+                    }}
+                />
+            )}
             {pendingLinkImport && (
                 <ModalLinkImport
                     count={pendingLinkImport.count}

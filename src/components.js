@@ -539,6 +539,53 @@ const ModalLoyaltyCards = ({ cards, onClose, onChangeCards, onToast }) => {
     );
 };
 
+const ModalOptions = ({
+    isDarkTheme,
+    onClose,
+    onToggleTheme,
+    onShare,
+    onExport,
+    onImport,
+    onClear,
+    onOpenCategories,
+    onOpenLoyalty
+}) => (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white w-full max-w-sm rounded-t-[2rem] sm:rounded-[2rem] p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-black text-gray-900 uppercase tracking-wide">Opzioni</h3>
+                <button onClick={onClose} className="text-gray-400 p-2" aria-label="Chiudi opzioni">
+                    <Icons.X size={18} />
+                </button>
+            </div>
+
+            <div className="grid gap-2">
+                <button onClick={onToggleTheme} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Tema: {isDarkTheme ? 'Scuro' : 'Chiaro'}
+                </button>
+                <button onClick={onShare} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Condividi lista
+                </button>
+                <button onClick={onExport} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Esporta CSV
+                </button>
+                <button onClick={onImport} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Importa lista
+                </button>
+                <button onClick={onOpenCategories} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Gestisci categorie
+                </button>
+                <button onClick={onOpenLoyalty} className="w-full py-3 px-4 text-left rounded-xl bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700">
+                    Carte fedeltà
+                </button>
+                <button onClick={onClear} className="w-full py-3 px-4 text-left rounded-xl bg-red-50 border border-red-100 text-sm font-bold text-red-600">
+                    Svuota lista
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
 const ModalTarget = ({ value, onSave, onClose }) => {
     const [val, setVal] = SmartCart.hooks.useState(value);
     return (
@@ -618,6 +665,7 @@ SmartCart.Components = {
     ModalItem,
     ModalCategoryManager,
     ModalLoyaltyCards,
+    ModalOptions,
     ModalTarget,
     Scanner,
     Toast
